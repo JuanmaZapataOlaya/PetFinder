@@ -1,0 +1,114 @@
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import { getCurrentUser } from '@/services/authService'
+import GoogleMapPicker from '@/components/GoogleMapPicker.vue'
+import type { ContactInfo } from '@/types'
+
+const currentUser = getCurrentUser()
+type ContactForm = Omit<Partial<ContactInfo>, 'location'> & {
+  latitude: number
+  longitude: number
+}
+
+const form = ref<ContactForm>({
+  userId: currentUser?.id,
+  fullName: '',
+  age: undefined,
+  phoneNumber: '',
+  email: '',
+  latitude: 6.2442,
+  longitude: -75.5812
+})
+
+const feedbackMessage = ref('')
+const loading = ref(false)
+
+onMounted(() => {
+  const allContacts = JSON.parse(localStorage.getItem('petfinder_contacts') || '{}')
+  if (currentUser?.id && allContacts[currentUser.id]) {
+    form.value = { ...form.value, ...allContacts[currentUser.id] }
+  }
+})
+
+function updateLocation(location: { latitude: number; longitude: number }) {
+  form.value.latitude = location.latitude
+  form.value.longitude = location.longitude
+}
+
+function saveContactInfo() {
+  if (!currentUser) {
+    feedbackMessage.value = 'Debes iniciar sesión para guardar tu información.'
+    return
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (form.value.email && !emailRegex.test(form.value.email)) {
+    feedbackMessage.value = 'El formato del correo electrónico es inválido.'
+    return
+  }
+
+  loading.value = true
+  try {
+    const allContacts = JSON.parse(localStorage.getItem('petfinder_contacts') || '{}')
+    allContacts[currentUser.id] = {
+      ...form.value,
+      updatedAt: Date.now()
+    }
+    
+    localStorage.setItem('petfinder_contacts', JSON.stringify(allContacts))
+    feedbackMessage.value = 'Información actualizada exitosamente.'
+  } finally {
+    loading.value = false
+  }
+}
+</script>
+
+<template>
+  <section class="page-view">
+    <div class="eyebrow">Mi Perfil</div>
+    <h1>Información de Contacto</h1>
+    <p class="page-intro">Configura la información que compartirás para contactar a otros usuarios o cuando visualicen tus reportes.</p>
+    
+    <form class="auth-form" @submit.prevent="saveContactInfo" style="max-width: 600px; margin-top: 2rem;">
+      <div class="form-field">
+        <label for="fullName">Nombre Completo (Opcional)</label>
+        <input id="fullName" v-model="form.fullName" type="text" placeholder="Ej. Juan Pérez" />
+      </div>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+        <div class="form-field">
+          <label for="age">Edad (Opcional)</label>
+          <input id="age" v-model="form.age" type="number" />
+        </div>
+        <div class="form-field">
+          <label for="phoneNumber">Teléfono (Opcional)</label>
+          <input id="phoneNumber" v-model="form.phoneNumber" type="tel" />
+        </div>
+      </div>
+
+      <div class="form-field">
+        <label for="email">Correo Electrónico (Opcional)</label>
+        <input id="email" v-model="form.email" type="email" />
+      </div>
+
+      <div class="form-field">
+        <label>Ubicación General (Opcional)</label>
+        <div style="border: 1px solid #ccc; border-radius: 8px; overflow: hidden;">
+          <GoogleMapPicker
+            :latitude="form.latitude"
+            :longitude="form.longitude"
+            :interactive="true"
+            height="250px"
+            @location-change="updateLocation"
+          />
+        </div>
+      </div>
+
+      <p v-if="feedbackMessage" style="color: #16a34a; margin-bottom: 1rem; font-weight: 500;">{{ feedbackMessage }}</p>
+
+      <button type="submit" class="primary-button" :disabled="loading">
+        {{ loading ? 'Guardando...' : 'Guardar Información' }}
+      </button>
+    </form>
+  </section>
+</template>
