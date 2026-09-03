@@ -6,6 +6,7 @@ import GoogleMapPicker from '@/components/GoogleMapPicker.vue'
 import { addTicket, breedsByType, removeTicket, tickets as allTickets, updateTicket } from '@/data/tickets'
 import { getCurrentUser } from '@/services/authService'
 import type { PetTicket, PetType, TicketKind } from '@/types'
+import { uploadPetImage } from '@/services/storageService'
 
 const defaultImage = 'https://images.unsplash.com/photo-1558788353-f76d92427f16?auto=format&fit=crop&w=640&q=85'
 const activeTab = ref<'Todas' | 'Activas' | 'Resueltas'>('Todas')
@@ -29,6 +30,7 @@ const reportColor = ref('')
 const reportBreed = ref('')
 const reportNote = ref('')
 const imagePreview = ref('')
+const imageFile = ref<File | null>(null)
 const reportLatitude = ref(19.4326)
 const reportLongitude = ref(-99.1332)
 const breeds = computed(() => breedsByType[reportType.value])
@@ -36,32 +38,37 @@ const otherReportsForMap = computed(() => allTickets.filter((ticket) => ticket.i
 
 function openCreate() {
   editingTicketId.value = null
-  reportName.value = ''; reportType.value = 'Perro'; reportKind.value = 'Perdida'; reportLocation.value = ''; reportColor.value = ''; reportBreed.value = ''; reportNote.value = ''; imagePreview.value = ''; reportLatitude.value = 19.4326; reportLongitude.value = -99.1332
+  reportName.value = ''; reportType.value = 'Perro'; reportKind.value = 'Perdida'; reportLocation.value = ''; reportColor.value = ''; reportBreed.value = ''; reportNote.value = ''; imagePreview.value = ''; imageFile.value = null; reportLatitude.value = 19.4326; reportLongitude.value = -99.1332
   showModal.value = true
 }
 function editTicket(ticket: PetTicket) {
   editingTicketId.value = ticket.id
-  reportName.value = ticket.name; reportType.value = ticket.type; reportKind.value = ticket.kind; reportLocation.value = ticket.location; reportColor.value = ticket.color; reportBreed.value = ticket.breed; reportNote.value = ticket.note; imagePreview.value = ticket.image; reportLatitude.value = ticket.latitude; reportLongitude.value = ticket.longitude
+  reportName.value = ticket.name; reportType.value = ticket.type; reportKind.value = ticket.kind; reportLocation.value = ticket.location; reportColor.value = ticket.color; reportBreed.value = ticket.breed; reportNote.value = ticket.note; imagePreview.value = ticket.image; imageFile.value = null; reportLatitude.value = ticket.latitude; reportLongitude.value = ticket.longitude
   showModal.value = true
 }
-function deleteTicket(id: number) {
+async function deleteTicket(id: number) {
   if (!window.confirm('¿Eliminar este reporte? Esta acción no se puede deshacer.')) return
-  removeTicket(id)
+  try { await removeTicket(id) } catch { return }
   showToast.value = true
   window.setTimeout(() => { showToast.value = false }, 3000)
 }
 function handleImage(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0]
   if (!file || !file.type.startsWith('image/') || file.size > 5 * 1024 * 1024) return
+  imageFile.value = file
   const reader = new FileReader()
   reader.onload = () => { imagePreview.value = String(reader.result) }
   reader.readAsDataURL(file)
 }
-function submitReport() {
+async function submitReport() {
   if (!currentUser.value || !reportLocation.value.trim()) return
   const data = { name: reportName.value.trim(), type: reportType.value, kind: reportKind.value, location: reportLocation.value.trim(), latitude: reportLatitude.value, longitude: reportLongitude.value, color: reportColor.value.trim(), breed: reportBreed.value, note: reportNote.value.trim(), image: imagePreview.value || defaultImage }
-  if (editingTicketId.value !== null) updateTicket(editingTicketId.value, data)
-  else addTicket({ ownerId: currentUser.value.id, ...data })
+  try {
+    const image = imageFile.value ? await uploadPetImage(imageFile.value, currentUser.value.id) : data.image
+    const ticketData = { ...data, image }
+    if (editingTicketId.value !== null) await updateTicket(editingTicketId.value, ticketData)
+    else await addTicket({ ownerId: currentUser.value.id, ...ticketData })
+  } catch { return }
   showModal.value = false
   showToast.value = true
   window.setTimeout(() => { showToast.value = false }, 3000)

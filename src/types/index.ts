@@ -31,19 +31,19 @@ export interface ContactInfo {
   updatedAt: number;
 }
 
-export type NotificationType = 'CONTACT_REQUEST';
+export type NotificationType = 'CONTACT_REQUEST' | 'MATCH_SUGGESTED' | 'CLAIM_SUBMITTED' | 'CLAIM_APPROVED' | 'CLAIM_REJECTED';
 
 export interface AppNotification {
   id: string;
   recipientUserId: string;
-  senderUserId: string;
+  senderUserId?: string;
   reportId: number;
   type: NotificationType;
   title: string;
   message: string;
-  senderName: string;
-  senderPhone: string;
-  senderEmail: string;
+  senderName?: string;
+  senderPhone?: string;
+  senderEmail?: string;
   petImage?: string;
   createdAt: number;
   read: boolean;

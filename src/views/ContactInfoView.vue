@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { getCurrentUser } from '@/services/authService'
 import GoogleMapPicker from '@/components/GoogleMapPicker.vue'
 import type { ContactInfo } from '@/types'
+import { getContactInfo, saveContactInfo as persistContactInfo } from '@/services/contactService'
 
 const currentUser = getCurrentUser()
 type ContactForm = Omit<Partial<ContactInfo>, 'location'> & {
@@ -23,11 +24,12 @@ const form = ref<ContactForm>({
 const feedbackMessage = ref('')
 const loading = ref(false)
 
-onMounted(() => {
-  const allContacts = JSON.parse(localStorage.getItem('petfinder_contacts') || '{}')
-  if (currentUser?.id && allContacts[currentUser.id]) {
-    form.value = { ...form.value, ...allContacts[currentUser.id] }
-  }
+onMounted(async () => {
+  if (!currentUser?.id) return
+  try {
+    const contact = await getContactInfo(currentUser.id)
+    if (contact) form.value = { ...form.value, ...contact, latitude: contact.location?.lat || form.value.latitude, longitude: contact.location?.lng || form.value.longitude }
+  } catch { feedbackMessage.value = 'No se pudo cargar la información de contacto.' }
 })
 
 function updateLocation(location: { latitude: number; longitude: number }) {
@@ -35,7 +37,7 @@ function updateLocation(location: { latitude: number; longitude: number }) {
   form.value.longitude = location.longitude
 }
 
-function saveContactInfo() {
+async function saveContactInfo() {
   if (!currentUser) {
     feedbackMessage.value = 'Debes iniciar sesión para guardar tu información.'
     return
@@ -49,14 +51,9 @@ function saveContactInfo() {
 
   loading.value = true
   try {
-    const allContacts = JSON.parse(localStorage.getItem('petfinder_contacts') || '{}')
-    allContacts[currentUser.id] = {
-      ...form.value,
-      updatedAt: Date.now()
-    }
-    
-    localStorage.setItem('petfinder_contacts', JSON.stringify(allContacts))
+    await persistContactInfo({ ...form.value, userId: currentUser.id })
     feedbackMessage.value = 'Información actualizada exitosamente.'
+  } catch { feedbackMessage.value = 'No se pudo guardar la información de contacto.'
   } finally {
     loading.value = false
   }

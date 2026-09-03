@@ -3,9 +3,10 @@ import { computed, ref, watch } from 'vue'
 import GoogleMapPicker from '@/components/GoogleMapPicker.vue'
 import Icon from '@/components/Icon.vue'
 import { tickets } from '@/data/tickets'
-import type { PetTicket, PetType, TicketKind } from '@/types'
+import type { ContactInfo, PetTicket, PetType, TicketKind } from '@/types'
 import { getCurrentUser } from '@/services/authService'
 import { sendContactRequest } from '@/services/notificationService'
+import { getContactInfo } from '@/services/contactService'
 
 const RADIUS_OPTIONS = [
   { label: '500 m', value: 500 },
@@ -80,13 +81,13 @@ const otherReportsForMap = computed(() => {
     .map((ticket) => ({ latitude: ticket.latitude, longitude: ticket.longitude, image: ticket.image, name: ticket.name }))
 })
 
-watch(selectedTicket, (newTicket) => {
+watch(selectedTicket, async (newTicket) => {
   showContactForm.value = false
   contactMessage.value = ''
   feedback.value = { text: '', isError: false }
   if (newTicket) {
-    const contacts = JSON.parse(localStorage.getItem('petfinder_contacts') || '{}')
-    ownerContactInfo.value = contacts[newTicket.ownerId] || null
+    const contact = await getContactInfo(newTicket.ownerId)
+    ownerContactInfo.value = contact ? { fullName: contact.fullName, phoneNumber: contact.phoneNumber, email: contact.email } : null
   } else {
     ownerContactInfo.value = null
   }
@@ -107,14 +108,13 @@ function formatDistance(meters: number): string {
   return meters < 1000 ? `${meters} m` : `${(meters / 1000).toFixed(1)} km`
 }
 
-function submitContact() {
+async function submitContact() {
   if (!selectedTicket.value || !currentUser.value) {
     feedback.value = { text: 'Debes iniciar sesión para contactar al propietario.', isError: true }
     return
   }
-  const contacts = JSON.parse(localStorage.getItem('petfinder_contacts') || '{}')
-  const sender = contacts[currentUser.value.id] || {}
-  const result = sendContactRequest({
+  const sender: Pick<ContactInfo, 'fullName' | 'phoneNumber' | 'email'> = await getContactInfo(currentUser.value.id) || {}
+  const result = await sendContactRequest({
     recipientUserId: selectedTicket.value.ownerId,
     senderUserId: currentUser.value.id,
     reportId: selectedTicket.value.id,

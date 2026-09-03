@@ -4,7 +4,8 @@ import GoogleMapPicker from '@/components/GoogleMapPicker.vue'
 import { tickets } from '@/data/tickets'
 import { getCurrentUser } from '@/services/authService'
 import { sendContactRequest } from '@/services/notificationService'
-import type { PetTicket, PetType, TicketKind } from '@/types'
+import { getContactInfo } from '@/services/contactService'
+import type { ContactInfo, PetTicket, PetType, TicketKind } from '@/types'
 
 const RADIUS_OPTIONS = [
   { label: 'Cualquier distancia', value: 0 },
@@ -27,14 +28,14 @@ const feedback = ref({ text: '', isError: false })
 
 const currentUser = computed(() => getCurrentUser())
 
-watch(selectedTicket, (newTicket) => {
+watch(selectedTicket, async (newTicket) => {
   showContactForm.value = false
   contactMessage.value = ''
   feedback.value = { text: '', isError: false }
 
   if (newTicket) {
-    const allContacts = JSON.parse(localStorage.getItem('petfinder_contacts') || '{}')
-    ownerContactInfo.value = allContacts[newTicket.ownerId] || null
+    const contact = await getContactInfo(newTicket.ownerId)
+    ownerContactInfo.value = contact ? { fullName: contact.fullName, phoneNumber: contact.phoneNumber, email: contact.email } : null
   } else {
     ownerContactInfo.value = null
   }
@@ -110,15 +111,14 @@ function formatDistance(meters: number): string {
   return `${(meters / 1000).toFixed(1)} km`
 }
 
-function submitContact() {
+async function submitContact() {
   if (!selectedTicket.value || !currentUser.value) {
     feedback.value = { text: 'Debes iniciar sesión para contactar al propietario.', isError: true }
     return
   }
 
-  const allContacts = JSON.parse(localStorage.getItem('petfinder_contacts') || '{}')
-  const myContactInfo = allContacts[currentUser.value.id] || {}
-  const result = sendContactRequest({
+  const myContactInfo: Pick<ContactInfo, 'fullName' | 'phoneNumber' | 'email'> = await getContactInfo(currentUser.value.id) || {}
+  const result = await sendContactRequest({
     recipientUserId: selectedTicket.value.ownerId,
     senderUserId: currentUser.value.id,
     reportId: selectedTicket.value.id,

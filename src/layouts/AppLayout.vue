@@ -28,18 +28,17 @@ function handleAvatarError() {
   avatarFailed.value = true
 }
 
-function handleStorageChange(event: StorageEvent) {
-  if (event.key === 'petfinder.session' || event.key === 'petfinder.users') syncUser()
+async function handleLogout() {
+  await logout()
+  await router.push('/login')
 }
 
 onMounted(() => {
   window.addEventListener(AUTH_STATE_CHANGED_EVENT, syncUser)
-  window.addEventListener('storage', handleStorageChange)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener(AUTH_STATE_CHANGED_EVENT, syncUser)
-  window.removeEventListener('storage', handleStorageChange)
 })
 </script>
 
@@ -54,7 +53,7 @@ onBeforeUnmount(() => {
       </nav>
       <div class="sidebar-spacer" />
       <div class="help-box"><strong>¿Necesitas ayuda?</strong><p>Estamos aquí para ayudarte a volver a encontrarlos.</p></div>
-      <div class="user-mini"><img class="avatar avatar-image" :src="avatarUrl" :alt="`Foto de ${user?.name || 'Usuario'}`" @error="handleAvatarError" /><div><strong>{{ user?.name || 'Usuario' }}</strong><span>Cuenta personal</span></div><button class="logout-button" title="Cerrar sesión" @click="logout(); router.push('/login')">Salir</button></div>
+      <div class="user-mini"><img class="avatar avatar-image" :src="avatarUrl" :alt="`Foto de ${user?.name || 'Usuario'}`" @error="handleAvatarError" /><div><strong>{{ user?.name || 'Usuario' }}</strong><span>Cuenta personal</span></div><button class="logout-button" title="Cerrar sesión" @click="handleLogout">Salir</button></div>
     </aside>
     <main class="main-content">
       <header class="topbar"><span class="crumb">PetFinder <b>/</b> {{ activeNav }}</span><div class="top-actions"><button type="button" class="icon-button" aria-label="Abrir notificaciones" @click="router.push({ name: 'Notifications' })"><Icon name="bell" :size="19" /><i class="notification-dot" /></button><img class="avatar avatar-image" :src="avatarUrl" :alt="`Foto de ${user?.name || 'Usuario'}`" @error="handleAvatarError" /></div></header>

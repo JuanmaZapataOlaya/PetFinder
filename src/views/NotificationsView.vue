@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { deleteNotification, getNotifications, updateNotificationRead } from '@/services/notificationService'
+import { getNotifications, updateNotificationRead } from '@/services/notificationService'
 import { getCurrentUser } from '@/services/authService'
 import type { AppNotification } from '@/types'
 
@@ -8,7 +8,6 @@ const currentUser = getCurrentUser()
 const notifications = ref<AppNotification[]>([])
 const loading = ref(true)
 const error = ref('')
-const notificationToDelete = ref<AppNotification | null>(null)
 const defaultPetImage = 'https://images.unsplash.com/photo-1558788353-f76d92427f16?auto=format&fit=crop&w=320&q=80'
 
 function formatDate(timestamp: number): string {
@@ -29,12 +28,12 @@ function handlePetImageError(event: Event) {
   image.src = defaultPetImage
 }
 
-function updateReadState(notification: AppNotification, read: boolean) {
+async function updateReadState(notification: AppNotification, read: boolean) {
   if (!currentUser || notification.read === read) return
 
   const previousState = notification.read
   notification.read = read
-  const result = updateNotificationRead(currentUser.id, notification.id, read)
+  const result = await updateNotificationRead(currentUser.id, notification.id, read)
 
   if (!result.success) {
     notification.read = previousState
@@ -42,9 +41,9 @@ function updateReadState(notification: AppNotification, read: boolean) {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   try {
-    if (currentUser) notifications.value = getNotifications(currentUser.id)
+    if (currentUser) notifications.value = await getNotifications(currentUser.id)
   } catch {
     error.value = 'No se pudieron cargar las notificaciones.'
   } finally {
