@@ -29,12 +29,12 @@ function handlePetImageError(event: Event) {
   image.src = defaultPetImage
 }
 
-function updateReadState(notification: AppNotification, read: boolean) {
+async function updateReadState(notification: AppNotification, read: boolean) {
   if (!currentUser || notification.read === read) return
 
   const previousState = notification.read
   notification.read = read
-  const result = updateNotificationRead(currentUser.id, notification.id, read)
+  const result = await updateNotificationRead(currentUser.id, notification.id, read)
 
   if (!result.success) {
     notification.read = previousState
@@ -50,11 +50,11 @@ function cancelDelete() {
   notificationToDelete.value = null
 }
 
-function confirmDelete() {
+async function confirmDelete() {
   if (!currentUser || !notificationToDelete.value) return
 
   const notification = notificationToDelete.value
-  const result = deleteNotification(currentUser.id, notification.id)
+  const result = await deleteNotification(currentUser.id, notification.id)
 
   if (!result.success) {
     error.value = result.error || 'No se pudo eliminar la notificación.'
@@ -66,9 +66,9 @@ function confirmDelete() {
   notificationToDelete.value = null
 }
 
-onMounted(() => {
+onMounted(async () => {
   try {
-    if (currentUser) notifications.value = getNotifications(currentUser.id)
+    if (currentUser) notifications.value = await getNotifications(currentUser.id)
   } catch {
     error.value = 'No se pudieron cargar las notificaciones.'
   } finally {
