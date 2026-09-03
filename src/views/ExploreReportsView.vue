@@ -8,11 +8,12 @@ import { getCurrentUser } from '@/services/authService'
 import { sendContactRequest } from '@/services/notificationService'
 
 const RADIUS_OPTIONS = [
-  { label: 'Cualquier distancia', value: 0 },
   { label: '500 m', value: 500 },
   { label: '1 km', value: 1000 },
   { label: '3 km', value: 3000 },
   { label: '5 km', value: 5000 },
+  { label: '20 km', value: 20000 },
+  { label: '100 km', value: 100000 },
 ]
 
 const search = ref('')
@@ -20,7 +21,7 @@ const kind = ref<'Todos' | TicketKind>('Todos')
 const type = ref<'Todas' | PetType>('Todas')
 const filterKind = ref<'Todos' | TicketKind>('Todos')
 const filterType = ref<'Todas' | PetType>('Todas')
-const filterRadius = ref(0)
+const filterRadius = ref(500)
 const refLat = ref(19.4326)
 const refLng = ref(-99.1332)
 const selectedTicket = ref<PetTicket | null>(null)
