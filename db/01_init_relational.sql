@@ -201,4 +201,62 @@ CREATE TRIGGER pet_tickets_set_updated_at
 BEFORE UPDATE ON pet_tickets
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+-- ============================================================
+-- RLS: el frontend usa la anon key y nunca debe confiarse en ella
+-- para autorizar operaciones. Las políticas se basan en auth.uid().
+-- ============================================================
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pet_tickets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contact_infos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app_notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY profiles_read_authenticated ON profiles
+FOR SELECT TO authenticated USING (true);
+CREATE POLICY profiles_update_own ON profiles
+FOR UPDATE TO authenticated USING (id = auth.uid()) WITH CHECK (id = auth.uid());
+
+CREATE POLICY tickets_read_authenticated ON pet_tickets
+FOR SELECT TO authenticated USING (true);
+CREATE POLICY tickets_insert_own ON pet_tickets
+FOR INSERT TO authenticated WITH CHECK (owner_id = auth.uid());
+CREATE POLICY tickets_update_own ON pet_tickets
+FOR UPDATE TO authenticated USING (owner_id = auth.uid()) WITH CHECK (owner_id = auth.uid());
+CREATE POLICY tickets_delete_own ON pet_tickets
+FOR DELETE TO authenticated USING (owner_id = auth.uid());
+
+CREATE POLICY contacts_read_authenticated ON contact_infos
+FOR SELECT TO authenticated USING (true);
+CREATE POLICY contacts_insert_own ON contact_infos
+FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid());
+CREATE POLICY contacts_update_own ON contact_infos
+FOR UPDATE TO authenticated USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY notifications_read_own ON app_notifications
+FOR SELECT TO authenticated USING (recipient_user_id = auth.uid());
+CREATE POLICY notifications_insert_sender ON app_notifications
+FOR INSERT TO authenticated WITH CHECK (sender_user_id = auth.uid());
+CREATE POLICY notifications_update_own ON app_notifications
+FOR UPDATE TO authenticated USING (recipient_user_id = auth.uid()) WITH CHECK (recipient_user_id = auth.uid());
+CREATE POLICY notifications_delete_own ON app_notifications
+FOR DELETE TO authenticated USING (recipient_user_id = auth.uid());
+
+CREATE POLICY audit_insert_authenticated ON audit_logs
+FOR INSERT TO authenticated WITH CHECK (true);
+
+-- Las imágenes se almacenan en Storage; la tabla solo conserva su URL pública.
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('pet-images', 'pet-images', TRUE)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE POLICY pet_images_insert_own ON storage.objects
+FOR INSERT TO authenticated
+WITH CHECK (bucket_id = 'pet-images' AND (storage.foldername(name))[1] = auth.uid()::text);
+CREATE POLICY pet_images_update_own ON storage.objects
+FOR UPDATE TO authenticated
+USING (bucket_id = 'pet-images' AND (storage.foldername(name))[1] = auth.uid()::text);
+CREATE POLICY pet_images_delete_own ON storage.objects
+FOR DELETE TO authenticated
+USING (bucket_id = 'pet-images' AND (storage.foldername(name))[1] = auth.uid()::text);
+
 COMMIT;
