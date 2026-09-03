@@ -42,30 +42,6 @@ function updateReadState(notification: AppNotification, read: boolean) {
   }
 }
 
-function requestDelete(notification: AppNotification) {
-  notificationToDelete.value = notification
-}
-
-function cancelDelete() {
-  notificationToDelete.value = null
-}
-
-function confirmDelete() {
-  if (!currentUser || !notificationToDelete.value) return
-
-  const notification = notificationToDelete.value
-  const result = deleteNotification(currentUser.id, notification.id)
-
-  if (!result.success) {
-    error.value = result.error || 'No se pudo eliminar la notificación.'
-    notificationToDelete.value = null
-    return
-  }
-
-  notifications.value = notifications.value.filter((item) => item.id !== notification.id)
-  notificationToDelete.value = null
-}
-
 onMounted(() => {
   try {
     if (currentUser) notifications.value = getNotifications(currentUser.id)
@@ -150,48 +126,12 @@ onMounted(() => {
           >
             Desmarcar
           </button>
-          <button
-            type="button"
-            class="secondary-button notification-action notification-action--delete"
-            @click="requestDelete(notification)"
-          >
-            Eliminar
-          </button>
+
         </div>
       </article>
     </div>
   </section>
 
-  <div
-    v-if="notificationToDelete"
-    class="modal-backdrop notification-confirmation"
-    role="presentation"
-    @click.self="cancelDelete"
-  >
-    <section
-      class="modal notification-confirmation__dialog"
-      role="alertdialog"
-      aria-modal="true"
-      aria-labelledby="delete-notification-title"
-      aria-describedby="delete-notification-description"
-    >
-      <div class="modal-head">
-        <div>
-          <div class="eyebrow">Confirmar acción</div>
-          <h2 id="delete-notification-title">¿Eliminar notificación?</h2>
-        </div>
-        <button type="button" class="close-button" aria-label="Cancelar eliminación" @click="cancelDelete">Cerrar</button>
-      </div>
-      <p id="delete-notification-description" class="modal-intro">
-        Esta acción eliminará permanentemente la notificación
-        <strong>“{{ notificationToDelete.title }}”</strong>.
-      </p>
-      <div class="notification-confirmation__actions">
-        <button type="button" class="secondary-button" @click="cancelDelete">Cancelar</button>
-        <button type="button" class="danger-button" @click="confirmDelete">Eliminar notificación</button>
-      </div>
-    </section>
-  </div>
 </template>
 
 <style scoped>
