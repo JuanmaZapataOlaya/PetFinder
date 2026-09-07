@@ -4,7 +4,7 @@ import { supabase } from '@/services/supabase'
 type SearchTicketRow = {
   id: number
   owner_id: string
-  name: string
+  name: string | null
   type: PetTicket['type']
   kind: PetTicket['kind']
   status: PetTicket['status']
@@ -24,7 +24,7 @@ function mapSearchTicket(row: SearchTicketRow): PetTicket {
   return {
     id: row.id,
     ownerId: row.owner_id,
-    name: row.name,
+    name: row.name || '',
     type: row.type,
     kind: row.kind,
     status: row.status,
