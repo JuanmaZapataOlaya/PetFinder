@@ -91,7 +91,26 @@ Deno.serve(async (request) => {
       return jsonResponse({ error: 'No fue posible buscar los reportes.' }, 500);
     }
 
-    return jsonResponse({ results: data || [] });
+    const results = data || [];
+    const maxHybridScore = Math.max(...results.map((result) => Number(result.hybrid_score) || 0), 0);
+    console.info('[search-pets] Resultados de búsqueda', {
+      query,
+      total: results.length,
+      results: results.map((result) => ({
+        id: result.id,
+        name: result.name,
+        keywordRank: result.keyword_rank,
+        semanticRank: result.semantic_rank,
+        keywordScore: result.keyword_score,
+        semanticScore: result.semantic_score,
+        hybridScore: result.hybrid_score,
+        hybridPercentage: maxHybridScore > 0
+          ? Number(((Number(result.hybrid_score) / maxHybridScore) * 100).toFixed(2))
+          : 0,
+      })),
+    });
+
+    return jsonResponse({ results });
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
       return jsonResponse({ error: 'La búsqueda tardó demasiado. Intenta de nuevo.' }, 504);
