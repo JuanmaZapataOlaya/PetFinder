@@ -14,7 +14,7 @@ export const breedsByType: Record<PetTicket['type'], string[]> = {
 type TicketRow = Record<string, unknown> & {
   id: number
   owner_id: string
-  name: string
+  name: string | null
   type: PetTicket['type']
   kind: PetTicket['kind']
   status: PetTicket['status']
@@ -32,7 +32,7 @@ type TicketRow = Record<string, unknown> & {
 function mapTicket(row: TicketRow): PetTicket {
   const reportedAt = new Date(row.reported_at)
   return {
-    id: row.id, ownerId: row.owner_id, name: row.name, type: row.type, kind: row.kind, status: row.status,
+    id: row.id, ownerId: row.owner_id, name: row.name || '', type: row.type, kind: row.kind, status: row.status,
     location: row.location, latitude: row.latitude, longitude: row.longitude, image: row.image, color: row.color,
     breed: row.breed, note: row.note, match: row.match_score,
     date: reportedAt.toLocaleDateString('es-CO'), timeAgo: reportedAt.toLocaleString('es-CO'),
@@ -47,7 +47,7 @@ export async function loadTickets() {
 
 export async function addTicket(ticket: Omit<PetTicket, 'id' | 'date' | 'timeAgo' | 'status' | 'match'>) {
   const { data, error } = await supabase.from('pet_tickets').insert({
-    owner_id: ticket.ownerId, name: ticket.name, type: ticket.type, kind: ticket.kind, location: ticket.location,
+    owner_id: ticket.ownerId, name: ticket.name.trim() || null, type: ticket.type, kind: ticket.kind, location: ticket.location,
     latitude: ticket.latitude, longitude: ticket.longitude, image: ticket.image, color: ticket.color,
     breed: ticket.breed, note: ticket.note,
   }).select().single()

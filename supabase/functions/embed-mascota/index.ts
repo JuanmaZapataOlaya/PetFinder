@@ -33,10 +33,10 @@ Deno.serve(async (request) => {
     const portkeyApiKey = Deno.env.get('PORTKEY_API_KEY');
     const portkeyBaseUrl = Deno.env.get('PORTKEY_BASE_URL');
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const supabaseSecretKey = Deno.env.get('SECRET_KEY');
 
     // Validación sin lanzar un Error global que colapse el worker
-    if (!portkeyApiKey || !supabaseUrl || !supabaseServiceKey || !portkeyBaseUrl) {
+    if (!portkeyApiKey || !supabaseUrl || !supabaseSecretKey || !portkeyBaseUrl) {
       console.error('[generate-pet-embedding] Configuración incompleta: faltan variables de entorno');
       return jsonResponse({ error: 'El servidor no está configurado correctamente.' }, 500);
     }
@@ -104,11 +104,11 @@ Deno.serve(async (request) => {
       }
 
       console.log('[generate-pet-embedding] Paso 9: Guardando embedding en Supabase');
-      const supabase = createClient(supabaseUrl, supabaseServiceKey);
+      const supabase = createClient(supabaseUrl, supabaseSecretKey);
       
       const { error: updateError } = await supabase
         .from('pet_tickets')
-        .update({ fts_embedding: embedding })
+        .update({ description_embedding: embedding })
         .eq('id', record.id);
 
       if (updateError) {
@@ -134,3 +134,4 @@ Deno.serve(async (request) => {
     return jsonResponse({ error: 'Error interno del servidor procesando la petición.' }, 500);
   }
 });
+

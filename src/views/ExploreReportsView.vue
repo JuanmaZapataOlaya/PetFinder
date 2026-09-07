@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import GoogleMapPicker from '@/components/GoogleMapPicker.vue'
 import Icon from '@/components/Icon.vue'
 import { tickets } from '@/data/tickets'
@@ -7,6 +7,7 @@ import type { ContactInfo, PetTicket, PetType, TicketKind } from '@/types'
 import { getCurrentUser } from '@/services/authService'
 import { sendContactRequest } from '@/services/notificationService'
 import { getContactInfo } from '@/services/contactService'
+import { searchPets } from '@/services/petSearchService'
 
 const RADIUS_OPTIONS = [
   { label: '500 m', value: 500 },
@@ -18,6 +19,9 @@ const RADIUS_OPTIONS = [
 ]
 
 const search = ref('')
+const searchResults = ref<PetTicket[]>([])
+const searchError = ref('')
+const searching = ref(false)
 const kind = ref<'Todos' | TicketKind>('Todos')
 const type = ref<'Todas' | PetType>('Todas')
 const filterKind = ref<'Todos' | TicketKind>('Todos')
@@ -32,13 +36,24 @@ const contactMessage = ref('')
 const feedback = ref({ text: '', isError: false })
 const currentUser = computed(() => getCurrentUser())
 
-const publicTickets = computed(() => tickets.filter((ticket) => {
-  const query = search.value.toLowerCase()
-  return (kind.value === 'Todos' || ticket.kind === kind.value) &&
-    (type.value === 'Todas' || ticket.type === type.value) &&
-    [ticket.name, ticket.location, ticket.breed, ticket.color, ticket.note]
-      .some((value) => value.toLowerCase().includes(query))
-}))
+const publicTickets = computed(() => searchResults.value.filter((ticket) =>
+  (kind.value === 'Todos' || ticket.kind === kind.value) &&
+  (type.value === 'Todas' || ticket.type === type.value)
+))
+
+async function submitSearch() {
+  searching.value = true
+  searchError.value = ''
+  try {
+    searchResults.value = await searchPets(search.value)
+  } catch (error) {
+    searchError.value = error instanceof Error ? error.message : 'No fue posible realizar la búsqueda.'
+  } finally {
+    searching.value = false
+  }
+}
+
+onMounted(() => { void submitSearch() })
 
 function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const earthRadius = 6_371_000
@@ -148,11 +163,13 @@ async function submitContact() {
         </div>
         <span class="section-count">{{ publicTickets.length }} reportes</span>
       </div>
-      <div class="explore-toolbar">
+      <form class="explore-toolbar" @submit.prevent="submitSearch">
         <div class="search-box"><Icon name="search" :size="16" /><input v-model="search" type="search" placeholder="Buscar por nombre, zona o raza" aria-label="Buscar reportes públicos" /></div>
+        <button class="primary-button search-submit" type="submit" :disabled="searching"><Icon name="search" :size="15" />{{ searching ? 'Buscando...' : 'Buscar' }}</button>
         <select v-model="kind" aria-label="Filtrar reportes por tipo"><option>Todos</option><option>Perdida</option><option>Encontrada</option></select>
         <select v-model="type" aria-label="Filtrar reportes por especie"><option>Todas</option><option>Perro</option><option>Gato</option><option>Ave</option><option>Otro</option></select>
-      </div>
+      </form>
+      <p v-if="searchError" class="search-error" role="alert">{{ searchError }}</p>
       <div class="explore-layout">
         <div class="public-report-grid">
           <article v-for="ticket in publicTickets" :key="ticket.id" class="public-report-card">
@@ -223,6 +240,9 @@ async function submitContact() {
 
 <style scoped>
 .unified-explore { max-width: 1320px; margin: 0 auto; }
+.explore-toolbar { grid-template-columns: minmax(220px, 1fr) auto 150px 150px; }
+.explore-toolbar .search-submit:disabled { opacity: .6; cursor: wait; }
+.search-error { margin: -14px 0 20px; color: #b5533e; font-size: 12px; }
 .explore-section, .matches-section { padding: 28px 0 34px; }
 .matches-section { border-top: 1px solid #dfe8dc; }
 .unified-section-heading { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 22px; }
@@ -243,5 +263,5 @@ async function submitContact() {
 .contact-form-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .5rem; }
 .contact-feedback { margin-top: 1rem !important; color: #16a34a; font-weight: bold; }
 .contact-feedback.error { color: #dc2626; }
-@media (max-width: 650px) { .unified-section-heading { align-items: flex-start; flex-direction: column; gap: 8px; } .explore-section, .matches-section { padding-top: 22px; } }
+@media (max-width: 650px) { .unified-section-heading { align-items: flex-start; flex-direction: column; gap: 8px; } .explore-section, .matches-section { padding-top: 22px; } .explore-toolbar { grid-template-columns: 1fr; } .explore-toolbar .search-submit { width: 100%; justify-content: center; } }
 </style>
