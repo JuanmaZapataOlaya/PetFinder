@@ -63,7 +63,7 @@ async function loadMap() {
       clickableIcons: false,
       gestureHandling: props.interactive ? 'greedy' : 'cooperative',
     })
-    marker = new AdvancedMarkerElement({ map, position: center, gmpDraggable: props.interactive, title: 'Ubicación del reporte', content: markerContent("https://cdn-icons-png.flaticon.com/512/14665/14665484.png", 65, '#5f8a67') }) // SI DEJA DE FUNCIONAR EL ICONO DEL MARKER HE AQUI EL RESPONSABLE
+    marker = new AdvancedMarkerElement({ map, position: center, gmpDraggable: props.interactive, title: 'Ubicación del reporte', content: markerContent(props.imageUrl ? props.imageUrl : 'https://cdn-icons-png.flaticon.com/512/14665/14665484.png', 65, '#5f8a67') }) // SI DEJA DE FUNCIONAR EL ICONO DEL MARKER HE AQUI EL RESPONSABLE
     if (props.interactive) {
       marker.addListener('dragend', () => updateLocation(marker?.position))
     }
