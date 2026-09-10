@@ -51,6 +51,7 @@ async function loadMap() {
     const { AdvancedMarkerElement } = await importLibrary('marker') as google.maps.MarkerLibrary
     advancedMarkerConstructor = AdvancedMarkerElement
     geocoder = new Geocoder()
+
     const center = { lat: props.latitude, lng: props.longitude }
     map = new Map(mapElement.value, {
       center,
@@ -62,12 +63,13 @@ async function loadMap() {
       clickableIcons: false,
       gestureHandling: props.interactive ? 'greedy' : 'cooperative',
     })
-    marker = new AdvancedMarkerElement({ map, position: center, gmpDraggable: props.interactive, title: 'Ubicación del reporte', content: markerContent(props.imageUrl, 56, '#5f8a67') })
+    marker = new AdvancedMarkerElement({ map, position: center, gmpDraggable: props.interactive, title: 'Ubicación del reporte', content: markerContent("https://cdn-icons-png.flaticon.com/512/14665/14665484.png", 65, '#5f8a67') }) // SI DEJA DE FUNCIONAR EL ICONO DEL MARKER HE AQUI EL RESPONSABLE
     if (props.interactive) {
       marker.addListener('dragend', () => updateLocation(marker?.position))
     }
     renderOtherMarkers()
     renderRadiusCircle()
+    
   } catch {
     mapError.value = 'No se pudo cargar Google Maps. Revisa la API key, facturación y APIs habilitadas.'
   }

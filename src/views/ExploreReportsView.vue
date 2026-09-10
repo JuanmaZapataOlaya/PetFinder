@@ -16,6 +16,7 @@ const RADIUS_OPTIONS = [
   { label: '5 km', value: 5000 },
   { label: '20 km', value: 20000 },
   { label: '100 km', value: 100000 },
+  { label : 'INF', value : 0}
 ]
 
 const search = ref('')
