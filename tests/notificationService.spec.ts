@@ -12,6 +12,10 @@ const payload = {
   senderName: otroUsuario.name,
   senderPhone: '555',
   senderEmail: otroUsuario.email,
+  evidenceImages: [
+    { url: 'https://example.com/evidence-1.jpg', path: 'user-2/evidence-1.jpg', contentType: 'image/jpeg' as const },
+    { url: 'https://example.com/evidence-2.png', path: 'user-2/evidence-2.png', contentType: 'image/png' as const },
+  ],
 }
 
 describe('notificationService', () => {

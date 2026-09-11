@@ -96,6 +96,14 @@ onMounted(async () => {
         </div>
 
         <p class="notification-card__description">{{ notificationDescription(notification) }}</p>
+        <div v-if="notification.evidenceImages?.length" class="notification-evidence">
+          <strong>Evidencia adjunta</strong>
+          <div class="notification-evidence__images">
+            <a v-for="(image, index) in notification.evidenceImages || []" :key="image.path" :href="image.url" target="_blank" rel="noopener">
+              <img :src="image.url" :alt="`Evidencia ${index + 1} de la notificación`" />
+            </a>
+          </div>
+        </div>
 
         <div class="notification-card__meta">
           <span v-if="notification.senderName"><strong>Remitente:</strong> {{ notification.senderName }}</span>
@@ -245,6 +253,27 @@ onMounted(async () => {
   font-size: 13px;
   line-height: 1.55;
   overflow-wrap: anywhere;
+}
+
+.notification-evidence {
+  margin: 14px 0;
+  color: #40564a;
+  font-size: 12px;
+}
+
+.notification-evidence__images {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+  max-width: 360px;
+}
+
+.notification-evidence__images img {
+  width: 100%;
+  height: 130px;
+  border-radius: 8px;
+  object-fit: cover;
 }
 
 .notification-card__meta,

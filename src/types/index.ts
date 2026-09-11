@@ -45,6 +45,13 @@ export interface AppNotification {
   senderPhone?: string;
   senderEmail?: string;
   petImage?: string;
+  evidenceImages: NotificationEvidenceImage[];
   createdAt: number;
   read: boolean;
+}
+
+export interface NotificationEvidenceImage {
+  url: string;
+  path: string;
+  contentType: 'image/jpeg' | 'image/png' | 'image/webp';
 }
