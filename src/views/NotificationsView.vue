@@ -96,6 +96,10 @@ onMounted(async () => {
         </div>
 
         <p class="notification-card__description">{{ notificationDescription(notification) }}</p>
+        <div v-if="notification.agentReport" class="notification-analysis">
+          <strong>Análisis de las fotografías</strong>
+          <p>{{ notification.agentReport }}</p>
+        </div>
         <div v-if="notification.evidenceImages?.length" class="notification-evidence">
           <strong>Evidencia adjunta</strong>
           <div class="notification-evidence__images">
@@ -253,6 +257,21 @@ onMounted(async () => {
   font-size: 13px;
   line-height: 1.55;
   overflow-wrap: anywhere;
+}
+
+.notification-analysis {
+  margin: 14px 0;
+  border-left: 3px solid #6c9b57;
+  padding: 10px 13px;
+  background: #f1f8ed;
+  color: #40564a;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.notification-analysis p {
+  margin: 5px 0 0;
+  white-space: pre-line;
 }
 
 .notification-evidence {

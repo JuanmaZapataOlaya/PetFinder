@@ -46,6 +46,7 @@ export interface AppNotification {
   senderEmail?: string;
   petImage?: string;
   evidenceImages: NotificationEvidenceImage[];
+  agentReport?: string;
   createdAt: number;
   read: boolean;
 }

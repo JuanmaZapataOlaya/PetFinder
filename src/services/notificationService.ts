@@ -8,6 +8,7 @@ function mapNotification(row: Record<string, unknown>): AppNotification {
     senderName: row.sender_name ? String(row.sender_name) : undefined, senderPhone: row.sender_phone ? String(row.sender_phone) : undefined,
     senderEmail: row.sender_email ? String(row.sender_email) : undefined, petImage: row.pet_image ? String(row.pet_image) : undefined,
     evidenceImages: Array.isArray(row.evidence_images) ? row.evidence_images as NotificationEvidenceImage[] : [],
+    agentReport: row.agent_report ? String(row.agent_report) : undefined,
     createdAt: new Date(String(row.created_at)).getTime(), read: Boolean(row.read),
   }
 }
@@ -47,5 +48,13 @@ export async function sendContactRequest(payload: Omit<AppNotification, 'id' | '
   }).select().single()
   if (error) return { success: false, error: error.message }
   const audit = await supabase.from('audit_logs').insert({ action: 'CONTACT_REQUEST_SENT', data: data })
-  return audit.error ? { success: false, error: audit.error.message } : { success: true }
+  if (audit.error) return { success: false, error: audit.error.message }
+
+  const { error: agentError } = await supabase.functions.invoke('validate-claim-agent', {
+    body: {
+      notificationId: data.id,
+      imageUrls: payload.evidenceImages.map((image) => image.url),
+    },
+  })
+  return agentError ? { success: false, error: agentError.message } : { success: true }
 }
