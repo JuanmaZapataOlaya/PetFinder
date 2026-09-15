@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/services/authService'
 import GoogleMapPicker from '@/components/GoogleMapPicker.vue'
 import type { ContactInfo } from '@/types'
 import { getContactInfo, saveContactInfo as persistContactInfo } from '@/services/contactService'
+import { countryCallingCodes } from '@/data/countryCallingCodes'
 
 const currentUser = getCurrentUser()
 type ContactForm = Omit<Partial<ContactInfo>, 'location'> & {
@@ -23,12 +24,31 @@ const form = ref<ContactForm>({
 
 const feedbackMessage = ref('')
 const loading = ref(false)
+const phonePrefix = ref('+57')
+
+function loadPhoneNumber(phone: string | undefined) {
+  if (!phone) return
+  const matchingCountry = [...countryCallingCodes]
+    .sort((first, second) => second.code.length - first.code.length)
+    .find((country) => phone.startsWith(country.code))
+  if (matchingCountry) {
+    phonePrefix.value = matchingCountry.code
+    form.value.phoneNumber = phone.slice(matchingCountry.code.length).replace(/\D/g, '')
+    return
+  }
+  form.value.phoneNumber = phone.replace(/\D/g, '')
+}
 
 onMounted(async () => {
   if (!currentUser?.id) return
   try {
     const contact = await getContactInfo(currentUser.id)
-    if (contact) form.value = { ...form.value, ...contact, latitude: contact.location?.lat || form.value.latitude, longitude: contact.location?.lng || form.value.longitude }
+    if (contact) {
+      form.value = { ...form.value, ...contact, latitude: contact.location?.lat || form.value.latitude, longitude: contact.location?.lng || form.value.longitude }
+      loadPhoneNumber(contact.phoneNumber)
+    } else {
+      loadPhoneNumber(currentUser.phoneNumber)
+    }
   } catch { feedbackMessage.value = 'No se pudo cargar la información de contacto.' }
 })
 
@@ -48,10 +68,14 @@ async function saveContactInfo() {
     feedbackMessage.value = 'El formato del correo electrónico es inválido.'
     return
   }
+  if (!/^\d{7,15}$/.test(form.value.phoneNumber || '')) {
+    feedbackMessage.value = 'Ingresa un número de teléfono válido de 7 a 15 dígitos.'
+    return
+  }
 
   loading.value = true
   try {
-    await persistContactInfo({ ...form.value, userId: currentUser.id })
+    await persistContactInfo({ ...form.value, phoneNumber: `${phonePrefix.value}${form.value.phoneNumber}`, userId: currentUser.id })
     feedbackMessage.value = 'Información actualizada exitosamente.'
   } catch { feedbackMessage.value = 'No se pudo guardar la información de contacto.'
   } finally {
@@ -78,8 +102,13 @@ async function saveContactInfo() {
           <input id="age" v-model="form.age" type="number" />
         </div>
         <div class="form-field">
-          <label for="phoneNumber">Teléfono (Opcional)</label>
-          <input id="phoneNumber" v-model="form.phoneNumber" type="tel" />
+          <label for="phoneNumber">Teléfono</label>
+          <div class="phone-input">
+            <select v-model="phonePrefix" aria-label="Prefijo telefónico">
+              <option v-for="country in countryCallingCodes" :key="`${country.name}-${country.code}`" :value="country.code">{{ country.name }} ({{ country.code }})</option>
+            </select>
+            <input id="phoneNumber" v-model="form.phoneNumber" type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="3001234567" pattern="[0-9]{7,15}" required />
+          </div>
         </div>
       </div>
 
