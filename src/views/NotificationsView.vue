@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { getNotifications, updateNotificationRead } from '@/services/notificationService'
+import { finalizeNotification, getNotifications, updateNotificationRead } from '@/services/notificationService'
 import { getCurrentUser } from '@/services/authService'
 import type { AppNotification } from '@/types'
 
@@ -8,6 +8,7 @@ const currentUser = getCurrentUser()
 const notifications = ref<AppNotification[]>([])
 const loading = ref(true)
 const error = ref('')
+const finalizingId = ref<string | null>(null)
 const defaultPetImage = 'https://images.unsplash.com/photo-1558788353-f76d92427f16?auto=format&fit=crop&w=320&q=80'
 
 function formatDate(timestamp: number): string {
@@ -39,6 +40,23 @@ async function updateReadState(notification: AppNotification, read: boolean) {
     notification.read = previousState
     error.value = result.error || 'No se pudo actualizar la notificación.'
   }
+}
+
+async function saveInHistory(notification: AppNotification) {
+  if (!currentUser || finalizingId.value) return
+  finalizingId.value = notification.id
+  const result = await finalizeNotification(currentUser.id, notification.id)
+  if (result.success) {
+    notifications.value = notifications.value.filter((item) => item.id !== notification.id)
+  } else {
+    error.value = result.error || 'No se pudo marcar el reporte como finalizado.'
+  }
+  finalizingId.value = null
+}
+
+function Notification_report(notification: AppNotification) {
+  // logig here
+  console.log('Reportando notificación:', notification.id)
 }
 
 onMounted(async () => {
@@ -123,12 +141,22 @@ onMounted(async () => {
         <div class="notification-card__actions">
           <button
             type="button"
+            class="primary-button notification-action notification-action--finish"
+            :disabled="finalizingId === notification.id"
+            @click="saveInHistory(notification)"
+          >
+            Marcar como finalizado
+          </button>
+          
+          <button
+            type="button"
             class="primary-button notification-action"
             :disabled="notification.read"
             @click="updateReadState(notification, true)"
           >
             Marcar como leída
           </button>
+          
           <button
             type="button"
             class="secondary-button notification-action"
@@ -137,12 +165,19 @@ onMounted(async () => {
           >
             Desmarcar
           </button>
+          
+          <button
+            type="button"
+            class="danger-button notification-action"
+            @click="Notification_report(notification)"
+          >
+            Reportar
+          </button>
 
         </div>
       </article>
     </div>
   </section>
-
 </template>
 
 <style scoped>
@@ -335,6 +370,19 @@ onMounted(async () => {
   cursor: not-allowed;
   opacity: .45;
   transform: none;
+}
+
+/* CLASE NUEVA PARA 'MARCAR COMO FINALIZADO' */
+.notification-action--finish {
+  background-color: #253b2f;
+  color: #ffffff;
+  border: 1px solid #253b2f;
+  font-weight: bold;
+}
+
+.notification-action--finish:hover {
+  background-color: #1a2921;
+  border-color: #1a2921;
 }
 
 .notification-action--delete {

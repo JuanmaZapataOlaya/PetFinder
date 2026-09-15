@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { getCurrentUser } from '@/services/authService'
 import ContactInfoView from '@/views/ContactInfoView.vue'
 import NotificationsView from '@/views/NotificationsView.vue'
+import PetHistoryView from '@/views/PetHistoryView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -14,7 +15,8 @@ const router = createRouter({
     { path: '/login', name: 'login', component: () => import('@/views/AuthView.vue') },
     { path: '/verificar-email', name: 'verify-email', component: () => import('@/views/VerifyEmailView.vue') },
     { path: '/contact-info', name: 'ContactInfo', component: ContactInfoView, meta: { requiresAuth: true } },
-    { path: '/notifications', name: 'Notifications', component: NotificationsView, meta: { label: 'Notificaciones', requiresAuth: true } }
+    { path: '/notifications', name: 'Notifications', component: NotificationsView, meta: { label: 'Notificaciones', requiresAuth: true } },
+    { path: '/historial-mascotas', name: 'PetHistory', component: PetHistoryView, meta: { label: 'Historial de mascotas', requiresAuth: true } }
   ],
 })
 

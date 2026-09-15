@@ -16,6 +16,7 @@ const navigation = [
   { label: 'Explorar reportes', path: '/explorar', icon: 'search' },
   { label: 'Mis reportes', path: '/reportes', icon: 'paw' },
   { label: 'Notificaciones', path: '/notifications', icon: 'message' },
+  { label: 'Historial de mascotas', path: '/historial-mascotas', icon: 'paw' },
   { label: 'Información personal', path: '/contact-info', icon: 'message' },
 ]
 

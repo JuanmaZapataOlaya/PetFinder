@@ -49,10 +49,20 @@ export interface AppNotification {
   agentReport?: string;
   createdAt: number;
   read: boolean;
+  finalizado: boolean;
 }
 
 export interface NotificationEvidenceImage {
   url: string;
   path: string;
   contentType: 'image/jpeg' | 'image/png' | 'image/webp';
+}
+
+export interface PetHistoryRecord {
+  id: string;
+  reportId: number;
+  finalizedAt: number;
+  pet: PetTicket;
+  reporterName: string;
+  finalizerName: string;
 }
