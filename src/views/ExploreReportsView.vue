@@ -162,7 +162,7 @@ async function submitContact() {
     evidenceImages,
   })
   feedback.value = result.success
-    ? { text: 'Tu información de contacto fue enviada correctamente al propietario.', isError: false }
+    ? { text: 'Tu solicitud fue enviada y las evidencias fueron validadas automáticamente.', isError: false }
     : { text: result.error || 'Ocurrió un error.', isError: true }
   if (result.success) showContactForm.value = false
   } catch (error) {

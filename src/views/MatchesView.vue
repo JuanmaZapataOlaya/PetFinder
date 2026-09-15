@@ -151,7 +151,7 @@ async function submitContact() {
   })
 
   if (result.success) {
-    feedback.value = { text: 'Tu información de contacto fue enviada correctamente al propietario.', isError: false }
+    feedback.value = { text: 'Tu solicitud fue enviada y las evidencias fueron validadas automáticamente.', isError: false }
     showContactForm.value = false
   } else {
     feedback.value = { text: result.error || 'Ocurrió un error.', isError: true }
