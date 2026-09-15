@@ -1,4 +1,4 @@
-import { ToolLoopAgent, stepCountIs } from 'npm:ai'
+import { generateText, ToolLoopAgent, stepCountIs } from 'npm:ai'
 import { createOpenAICompatible } from 'npm:@ai-sdk/openai-compatible'
 import { analyzeImageMetadata } from './tools/analyze-image-metadata.ts'
 import { detectAiGeneratedImage } from './tools/detect-ai-generated-image.ts'
@@ -28,6 +28,126 @@ const portkey = createOpenAICompatible({
     'x-portkey-provider': '@google-gemini', // ej. '@google-gemini'
   },
 })
+
+type ClaimTicket = {
+  type: string
+  breed: string
+  color: string
+  image: string
+}
+
+type RelevanceResult = {
+  relevante: boolean
+  razon: string
+}
+
+type TokenUsage = {
+  inputTokens: number
+  outputTokens: number
+}
+
+const GUARD_INPUT_COST_PER_MILLION = 0.25
+const GUARD_OUTPUT_COST_PER_MILLION = 1.5
+const AGENT_INPUT_COST_PER_MILLION = 0.3
+const AGENT_OUTPUT_COST_PER_MILLION = 2.5
+
+function getTokenUsage(result: { usage?: unknown }): TokenUsage {
+  const usage = result.usage && typeof result.usage === 'object'
+    ? result.usage as Record<string, unknown>
+    : {}
+  const inputTokens = Number(usage.inputTokens ?? 0)
+  const outputTokens = Number(usage.outputTokens ?? 0)
+  return {
+    inputTokens: Number.isFinite(inputTokens) && inputTokens >= 0 ? inputTokens : 0,
+    outputTokens: Number.isFinite(outputTokens) && outputTokens >= 0 ? outputTokens : 0,
+  }
+}
+
+function addTokenUsage(first: TokenUsage, second: TokenUsage): TokenUsage {
+  return {
+    inputTokens: first.inputTokens + second.inputTokens,
+    outputTokens: first.outputTokens + second.outputTokens,
+  }
+}
+
+function calculateCost(usage: TokenUsage, inputRate: number, outputRate: number) {
+  return usage.inputTokens * inputRate / 1_000_000 + usage.outputTokens * outputRate / 1_000_000
+}
+
+async function isImageRelevantToClaim(imageUrl: string, ticket: ClaimTicket): Promise<{ result: RelevanceResult; usage: TokenUsage }> {
+  const result = await generateText({
+    model: portkey(Deno.env.get('GEMINI_GATE_MODEL') || 'gemini-3.1-flash-lite'),
+    messages: [{
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: `¿Esta imagen muestra un animal de la especie "${ticket.type}", con pelaje o color similar a "${ticket.color}" y, cuando sea posible, rasgos compatibles con la raza "${ticket.breed}"? Compárala también con esta foto de referencia del reporte original. Responde SOLO con JSON válido: {"relevante": true|false, "razon": "..."}`,
+        },
+        { type: 'image', image: imageUrl },
+        { type: 'image', image: ticket.image },
+      ],
+    }],
+  })
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(result.text)
+  } catch {
+    throw new Error('El validador de imágenes devolvió una respuesta inválida')
+  }
+
+  if (
+    !parsed ||
+    typeof parsed !== 'object' ||
+    typeof (parsed as Record<string, unknown>).relevante !== 'boolean' ||
+    typeof (parsed as Record<string, unknown>).razon !== 'string'
+  ) {
+    throw new Error('El validador de imágenes devolvió un resultado incompleto')
+  }
+
+  return { result: parsed as RelevanceResult, usage: getTokenUsage(result) }
+}
+
+async function validateClaimImages(imageUrls: string[], ticket: ClaimTicket): Promise<{ result: RelevanceResult; usage: TokenUsage }> {
+  let usage: TokenUsage = { inputTokens: 0, outputTokens: 0 }
+  for (const imageUrl of imageUrls) {
+    const validation = await isImageRelevantToClaim(imageUrl, ticket)
+    usage = addTokenUsage(usage, validation.usage)
+    if (!validation.result.relevante) return { result: validation.result, usage }
+  }
+  return {
+    result: { relevante: true, razon: 'Las evidencias son coherentes con el reporte original.' },
+    usage,
+  }
+}
+
+async function createCostRecord(notificationId: string, guardUsage: TokenUsage) {
+  const { data, error } = await supabaseAdmin
+    .from('claim_validation_costs')
+    .insert({
+      notification_id: notificationId,
+      guard_input_tokens: guardUsage.inputTokens,
+      guard_output_tokens: guardUsage.outputTokens,
+      guard_cost: calculateCost(guardUsage, GUARD_INPUT_COST_PER_MILLION, GUARD_OUTPUT_COST_PER_MILLION),
+    })
+    .select('id')
+    .single()
+  if (error) throw error
+  return data.id as string
+}
+
+async function completeCostRecord(costId: string, agentUsage: TokenUsage) {
+  const { error } = await supabaseAdmin
+    .from('claim_validation_costs')
+    .update({
+      agent_input_tokens: agentUsage.inputTokens,
+      agent_output_tokens: agentUsage.outputTokens,
+      agent_cost: calculateCost(agentUsage, AGENT_INPUT_COST_PER_MILLION, AGENT_OUTPUT_COST_PER_MILLION),
+    })
+    .eq('id', costId)
+  if (error) throw error
+}
 
 const SYSTEM_PROMPT = `
 Eres un asistente que ayuda al dueño de una mascota a evaluar si las fotos de soporte
@@ -79,6 +199,48 @@ const agent = new ToolLoopAgent({
   stopWhen: stepCountIs(20), // hasta 5 imágenes × hasta 3 tools cada una + margen de razonamiento
 })
 
+async function sendClaimNotificationEmail(notification: {
+  recipient_user_id: string
+  report_id: number
+  sender_name: string | null
+  pet_tickets: { name: string | null } | null
+}) {
+  const resendApiKey = Deno.env.get('RESEND_API_KEY')
+  const fromEmail = Deno.env.get('RESEND_FROM_EMAIL')
+  if (!resendApiKey || !fromEmail) {
+    console.warn('[validate-claim-agent] RESEND_API_KEY o RESEND_FROM_EMAIL no configurado; se omite el correo')
+    return
+  }
+
+  const { data: recipient, error: recipientError } = await supabaseAdmin.auth.admin.getUserById(notification.recipient_user_id)
+  const recipientEmail = recipient?.user?.email
+  if (recipientError || !recipientEmail) {
+    console.error('[validate-claim-agent] No se pudo obtener el correo del propietario:', recipientError)
+    return
+  }
+
+  const senderName = notification.sender_name || 'Un usuario'
+  const petName = notification.pet_tickets?.name || `reporte #${notification.report_id}`
+  const escapeHtml = (value: string) => value.replace(/[&<>'"]/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
+  })[character] || character)
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${resendApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: fromEmail,
+      to: [recipientEmail],
+      subject: `Nueva solicitud para tu mascota: ${petName}`,
+      html: `<p>Hola,</p><p><strong>${escapeHtml(senderName)}</strong> envió una solicitud relacionada con el reporte de <strong>${escapeHtml(petName)}</strong>.</p><p>Revisa la solicitud y sus evidencias desde PetFinder. La validación automática de las imágenes se está ejecutando en segundo plano.</p>`,
+    }),
+  })
+
+  if (!response.ok) console.error('[validate-claim-agent] Error enviando correo:', await response.text())
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -100,20 +262,38 @@ Deno.serve(async (req) => {
 
     const { data: notification, error: notificationError } = await supabaseAdmin
       .from('app_notifications')
-      .select('id, sender_user_id, type')
+      .select('id, sender_user_id, recipient_user_id, report_id, sender_name, type, pet_tickets(name, type, breed, color, image)')
       .eq('id', body.notificationId)
       .single()
     if (notificationError || !notification || notification.sender_user_id !== user.id || notification.type !== 'CONTACT_REQUEST') {
       return jsonResponse({ error: 'La notificación no pertenece al solicitante' }, 403)
     }
 
+    const ticket = notification.pet_tickets
+    if (!ticket || !ticket.type || !ticket.breed || !ticket.color || !ticket.image) {
+      return jsonResponse({ error: 'No se pudo obtener la información del reporte original' }, 500)
+    }
+
+    const relevance = await validateClaimImages(body.imageUrls, ticket)
+    const costId = await createCostRecord(notification.id, relevance.usage)
+    if (!relevance.result.relevante) {
+      return jsonResponse({
+        error: `Las imágenes no parecen corresponder con la mascota del reporte. ${relevance.result.razon}`,
+        code: 'IRRELEVANT_EVIDENCE',
+      }, 422)
+    }
+
     console.log('[validate-claim-agent] Evaluando', body.imageUrls.length, 'imágenes')
 
-    const result = await agent.generate({
-      prompt: `Evalúa estas imágenes de soporte para un reclamo de mascota:\n${
-        body.imageUrls.map((u: string, i: number) => `${i + 1}. ${u}`).join('\n')
-      }`,
-    })
+    const [_, result] = await Promise.all([
+      sendClaimNotificationEmail(notification),
+      agent.generate({
+        prompt: `Evalúa estas imágenes de soporte para un reclamo de mascota:\n${
+          body.imageUrls.map((u: string, i: number) => `${i + 1}. ${u}`).join('\n')
+        }`,
+      }),
+    ])
+    await completeCostRecord(costId, getTokenUsage(result))
 
     console.log('[validate-claim-agent] Pasos:', JSON.stringify(result.steps, null, 2))
 
