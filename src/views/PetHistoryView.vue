@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { getCurrentUser } from '@/services/authService'
 import { getPetHistory } from '@/services/notificationService'
 import type { PetHistoryRecord } from '@/types'
 
@@ -19,14 +18,8 @@ function handleImageError(event: Event) {
 }
 
 onMounted(async () => {
-  const user = getCurrentUser()
-  if (!user) {
-    error.value = 'Debes iniciar sesión para consultar el historial.'
-    loading.value = false
-    return
-  }
   try {
-    history.value = await getPetHistory(user.id)
+    history.value = await getPetHistory()
   } catch {
     error.value = 'No se pudo cargar el historial de mascotas.'
   } finally {
@@ -71,7 +64,7 @@ onMounted(async () => {
           <p class="history-description">{{ record.pet.note || 'Sin descripción disponible.' }}</p>
           <div class="history-users">
             <span><strong>Usuario reportante:</strong> {{ record.reporterName }}</span>
-            <span><strong>Usuario que finalizó/recuperó:</strong> {{ record.finalizerName }}</span>
+            <span><strong>Usuario receptor:</strong> {{ record.recipientName }}</span>
           </div>
           <small class="history-finished">Caso finalizado el {{ formatDate(record.finalizedAt) }}</small>
         </div>

@@ -32,9 +32,10 @@ export async function finalizeNotification(userId: string, notificationId: strin
 type HistoryNotificationRow = {
   id: string
   report_id: number
+  sender_user_id: string | null
   recipient_user_id: string
   created_at: string
-  pet_tickets: PetHistoryTicketRow | null
+  pet_tickets: PetHistoryTicketRow | PetHistoryTicketRow[] | null
 }
 
 type PetHistoryTicketRow = {
@@ -65,36 +66,38 @@ function mapHistoryPet(row: PetHistoryTicketRow): PetTicket {
   }
 }
 
-export async function getPetHistory(userId: string): Promise<PetHistoryRecord[]> {
+export async function getPetHistory(): Promise<PetHistoryRecord[]> {
   const { data: notificationRows, error: notificationError } = await supabase
     .from('app_notifications')
-    .select('id, report_id, recipient_user_id, created_at, pet_tickets(*)')
-    .eq('recipient_user_id', userId)
+    .select('id, report_id, sender_user_id, recipient_user_id, created_at, pet_tickets(*)')
     .eq('finalizado', true)
     .order('created_at', { ascending: false })
   if (notificationError) throw notificationError
 
   const rows = (notificationRows || []) as unknown as HistoryNotificationRow[]
-  const reportIds = [...new Set(rows.map((row) => row.pet_tickets?.id).filter((id): id is number => typeof id === 'number'))]
-  const userIds = [...new Set(rows.flatMap((row) => row.pet_tickets ? [row.pet_tickets.owner_id, row.recipient_user_id] : []))]
-  if (!reportIds.length || !userIds.length) return []
+  if (!rows.length) return []
 
-  const [{ data: ticketRows, error: ticketError }, { data: profileRows, error: profileError }] = await Promise.all([
-    supabase.from('pet_tickets').select('*').in('id', reportIds),
-    supabase.from('profiles').select('id, name').in('id', userIds),
-  ])
-  if (ticketError) throw ticketError
+  const userIds = [...new Set(rows.flatMap((row) => {
+    const pet = Array.isArray(row.pet_tickets) ? row.pet_tickets[0] : row.pet_tickets
+    return pet ? [row.sender_user_id, row.recipient_user_id].filter((id): id is string => Boolean(id)) : []
+  }))]
+  if (!userIds.length) return []
+
+  const { data: profileRows, error: profileError } = await supabase
+    .from('profiles')
+    .select('id, name')
+    .in('id', userIds)
   if (profileError) throw profileError
 
-  const ticketsById = new Map((ticketRows || []).map((row) => [Number(row.id), mapHistoryPet(row as PetHistoryTicketRow)]))
   const namesById = new Map((profileRows || []).map((row) => [String(row.id), String(row.name)]))
   return rows.flatMap((row) => {
-    const pet = row.pet_tickets ? ticketsById.get(row.pet_tickets.id) : undefined
-    if (!pet) return []
+    const ticket = Array.isArray(row.pet_tickets) ? row.pet_tickets[0] : row.pet_tickets
+    if (!ticket) return []
+    const pet = mapHistoryPet(ticket)
     return [{
       id: row.id, reportId: row.report_id, finalizedAt: new Date(row.created_at).getTime(), pet,
-      reporterName: namesById.get(pet.ownerId) || 'Usuario reportante',
-      finalizerName: namesById.get(row.recipient_user_id) || 'Usuario',
+      reporterName: row.sender_user_id ? namesById.get(row.sender_user_id) || 'Usuario reportante' : 'Usuario reportante',
+      recipientName: namesById.get(row.recipient_user_id) || 'Usuario receptor',
     }]
   })
 }

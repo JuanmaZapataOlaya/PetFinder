@@ -16,7 +16,7 @@ const router = createRouter({
     { path: '/verificar-email', name: 'verify-email', component: () => import('@/views/VerifyEmailView.vue') },
     { path: '/contact-info', name: 'ContactInfo', component: ContactInfoView, meta: { requiresAuth: true } },
     { path: '/notifications', name: 'Notifications', component: NotificationsView, meta: { label: 'Notificaciones', requiresAuth: true } },
-    { path: '/historial-mascotas', name: 'PetHistory', component: PetHistoryView, meta: { label: 'Historial de mascotas', requiresAuth: true } }
+    { path: '/historial-mascotas', name: 'PetHistory', component: PetHistoryView, meta: {} }
   ],
 })
 

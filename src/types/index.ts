@@ -64,5 +64,5 @@ export interface PetHistoryRecord {
   finalizedAt: number;
   pet: PetTicket;
   reporterName: string;
-  finalizerName: string;
+  recipientName: string;
 }
