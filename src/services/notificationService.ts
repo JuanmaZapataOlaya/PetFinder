@@ -110,8 +110,9 @@ export async function deleteNotification(userId: string, notificationId: string)
 export async function sendContactRequest(payload: Omit<AppNotification, 'id' | 'createdAt' | 'read' | 'finalizado'>): Promise<{ success: boolean; error?: string }> {
   if (!payload.senderUserId || payload.senderUserId === payload.recipientUserId) return { success: false, error: 'No puedes enviarte una solicitud a ti mismo.' }
   if (payload.evidenceImages.length !== 2) return { success: false, error: 'Debes adjuntar exactamente 2 fotografías como evidencia.' }
-  if (payload.evidenceImages.some((image) => !['image/jpeg', 'image/png', 'image/webp'].includes(image.contentType))) {
-    return { success: false, error: 'Solo se permiten fotografías JPG, JPEG, PNG o WEBP.' }
+  const allowedExtensions = new Set(['jpg', 'jpeg', 'heic', 'heif', 'png', 'dng'])
+  if (payload.evidenceImages.some((image) => !allowedExtensions.has(image.path.split('.').pop()?.toLowerCase() || ''))) {
+    return { success: false, error: 'Solo se permiten fotografías JPG, JPEG, HEIC, HEIF, PNG o DNG.' }
   }
   const since = new Date(Date.now() - 60 * 60 * 1000).toISOString()
   const { data: duplicate, error: duplicateError } = await supabase.from('app_notifications').select('id').eq('sender_user_id', payload.senderUserId).eq('report_id', payload.reportId).gte('created_at', since).limit(1)

@@ -55,7 +55,7 @@ export interface AppNotification {
 export interface NotificationEvidenceImage {
   url: string;
   path: string;
-  contentType: 'image/jpeg' | 'image/png' | 'image/webp';
+  contentType: string;
 }
 
 export interface PetHistoryRecord {

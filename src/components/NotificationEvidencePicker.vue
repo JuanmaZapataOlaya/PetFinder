@@ -4,6 +4,8 @@ import { onBeforeUnmount, ref } from 'vue'
 const emit = defineEmits<{ 'update:modelValue': [files: File[]] }>()
 const previews = ref<string[]>([])
 const error = ref('')
+const allowedExtensions = new Set(['jpg', 'jpeg', 'heic', 'heif', 'png', 'dng'])
+const allowedFormatsLabel = 'JPG, JPEG, HEIC, HEIF, PNG o DNG'
 
 function clearPreviews() {
   previews.value.forEach((preview) => URL.revokeObjectURL(preview))
@@ -22,8 +24,8 @@ function onFilesSelected(event: Event) {
     input.value = ''
     return
   }
-  if (files.some((file) => !['image/jpeg', 'image/png', 'image/webp'].includes(file.type))) {
-    error.value = 'Formato no permitido. Usa JPG, JPEG, PNG o WEBP.'
+  if (files.some((file) => !allowedExtensions.has(file.name.split('.').pop()?.toLowerCase() || ''))) {
+    error.value = `Formato no permitido. Usa únicamente ${allowedFormatsLabel}.`
     emit('update:modelValue', [])
     input.value = ''
     return
@@ -39,8 +41,8 @@ onBeforeUnmount(clearPreviews)
 <template>
   <div class="evidence-picker">
     <label for="notification-evidence">Fotografías de evidencia (obligatorias)</label>
-    <input id="notification-evidence" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple @change="onFilesSelected" />
-    <small>Selecciona exactamente 2 imágenes en JPG, JPEG, PNG o WEBP.</small>
+    <input id="notification-evidence" type="file" accept=".jpg,.jpeg,.heic,.heif,.png,.dng" multiple @change="onFilesSelected" />
+    <small>Selecciona exactamente 2 imágenes en {{ allowedFormatsLabel }}.</small>
     <p v-if="error" class="evidence-error" role="alert">{{ error }}</p>
     <div v-if="previews.length" class="evidence-previews" aria-label="Vista previa de evidencias">
       <img v-for="(preview, index) in previews" :key="preview" :src="preview" :alt="`Evidencia ${index + 1}`" />
