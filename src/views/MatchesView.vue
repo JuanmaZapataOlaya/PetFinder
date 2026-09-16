@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import GoogleMapPicker from '@/components/GoogleMapPicker.vue'
+import NotificationEvidencePicker from '@/components/NotificationEvidencePicker.vue'
 import { tickets } from '@/data/tickets'
 import { getCurrentUser } from '@/services/authService'
 import { sendContactRequest } from '@/services/notificationService'
 import { getContactInfo } from '@/services/contactService'
 import type { ContactInfo, PetTicket, PetType, TicketKind } from '@/types'
+import { uploadNotificationEvidence } from '@/services/storageService'
 
 const RADIUS_OPTIONS = [
   { label: 'Cualquier distancia', value: 0 },
@@ -24,6 +26,8 @@ const selectedTicket = ref<PetTicket | null>(null)
 const ownerContactInfo = ref<{ fullName?: string; phoneNumber?: string; email?: string } | null>(null)
 const showContactForm = ref(false)
 const contactMessage = ref('')
+const evidenceFiles = ref<File[]>([])
+const sendingContact = ref(false)
 const feedback = ref({ text: '', isError: false })
 
 const currentUser = computed(() => getCurrentUser())
@@ -31,6 +35,7 @@ const currentUser = computed(() => getCurrentUser())
 watch(selectedTicket, async (newTicket) => {
   showContactForm.value = false
   contactMessage.value = ''
+  evidenceFiles.value = []
   feedback.value = { text: '', isError: false }
 
   if (newTicket) {
@@ -116,8 +121,15 @@ async function submitContact() {
     feedback.value = { text: 'Debes iniciar sesión para contactar al propietario.', isError: true }
     return
   }
+  if (evidenceFiles.value.length !== 2) {
+    feedback.value = { text: 'Debes adjuntar exactamente 2 fotografías como evidencia.', isError: true }
+    return
+  }
+  sendingContact.value = true
+  try {
 
   const myContactInfo: Pick<ContactInfo, 'fullName' | 'phoneNumber' | 'email'> = await getContactInfo(currentUser.value.id) || {}
+  const evidenceImages = await uploadNotificationEvidence(evidenceFiles.value, currentUser.value.id)
   const result = await sendContactRequest({
     recipientUserId: selectedTicket.value.ownerId,
     senderUserId: currentUser.value.id,
@@ -129,6 +141,7 @@ async function submitContact() {
     senderName: myContactInfo.fullName || currentUser.value.name || 'Usuario',
     senderPhone: myContactInfo.phoneNumber || 'No especificado',
     senderEmail: myContactInfo.email || 'No especificado',
+    evidenceImages,
   })
 
   if (result.success) {
@@ -136,6 +149,11 @@ async function submitContact() {
     showContactForm.value = false
   } else {
     feedback.value = { text: result.error || 'Ocurrió un error.', isError: true }
+  }
+  } catch (error) {
+    feedback.value = { text: error instanceof Error ? error.message : 'No se pudieron cargar las fotografías.', isError: true }
+  } finally {
+    sendingContact.value = false
   }
 }
 </script>
@@ -240,13 +258,14 @@ async function submitContact() {
               maxlength="200"
               placeholder="Ej: Hola, creo haber visto a tu mascota..."
             />
+            <NotificationEvidencePicker v-model="evidenceFiles" />
             <div class="contact-form-actions">
               <button type="button" class="secondary-button" @click="showContactForm = false">Cancelar</button>
-              <button type="submit" class="primary-button">Enviar solicitud</button>
+              <button type="submit" class="primary-button" :disabled="sendingContact">{{ sendingContact ? 'Enviando...' : 'Enviar solicitud' }}</button>
             </div>
           </form>
         </div>
-        <p v-if="feedback.text" class="contact-feedback" :class="{ error: feedback.isError }">
+        <p v-if="feedback.text" class="contact-feedback" :class="{ error: feedback.isError }" :role="feedback.isError ? 'alert' : 'status'" aria-live="polite">
           {{ feedback.text }}
         </p>
       </div>

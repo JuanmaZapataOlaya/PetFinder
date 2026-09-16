@@ -140,6 +140,22 @@ CREATE TABLE contact_infos (
 -- APP_NOTIFICATIONS
 -- PROBABLE CAMBIO: el CHECK de 'type' debe ampliarse si agregas más eventos.
 -- ============================================================
+CREATE OR REPLACE FUNCTION public.validate_notification_evidence(images JSONB)
+RETURNS BOOLEAN
+LANGUAGE SQL
+IMMUTABLE
+AS $$
+  SELECT jsonb_typeof(images) = 'array'
+    AND jsonb_array_length(images) = 2
+    AND NOT EXISTS (
+      SELECT 1 FROM jsonb_array_elements(images) AS item
+      WHERE jsonb_typeof(item) <> 'object'
+        OR NULLIF(item->>'url', '') IS NULL
+        OR NULLIF(item->>'path', '') IS NULL
+        OR item->>'content_type' NOT IN ('image/jpeg', 'image/png', 'image/webp')
+    );
+$$;
+
 CREATE TABLE app_notifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- ESTABLE
     recipient_user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -158,10 +174,29 @@ CREATE TABLE app_notifications (
     sender_phone TEXT,
     sender_email TEXT,
     pet_image TEXT,
+    evidence_images JSONB NOT NULL DEFAULT '[]'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     read BOOLEAN NOT NULL DEFAULT FALSE,
+    finalizado BOOLEAN NOT NULL DEFAULT FALSE,
     CHECK (sender_user_id IS NULL OR recipient_user_id <> sender_user_id)
 );
+
+CREATE OR REPLACE FUNCTION public.require_contact_notification_evidence()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.type = 'CONTACT_REQUEST'
+     AND NOT public.validate_notification_evidence(NEW.evidence_images) THEN
+    RAISE EXCEPTION 'Las solicitudes de contacto requieren exactamente 2 imágenes válidas.';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER app_notifications_require_evidence
+BEFORE INSERT OR UPDATE OF type, evidence_images ON public.app_notifications
+FOR EACH ROW EXECUTE FUNCTION public.require_contact_notification_evidence();
 
 CREATE INDEX app_notifications_recipient_created_idx
     ON app_notifications (recipient_user_id, created_at DESC);

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { getNotifications, updateNotificationRead } from '@/services/notificationService'
+import { finalizeNotification, getNotifications, updateNotificationRead } from '@/services/notificationService'
 import { getCurrentUser } from '@/services/authService'
 import type { AppNotification } from '@/types'
 
@@ -8,6 +8,7 @@ const currentUser = getCurrentUser()
 const notifications = ref<AppNotification[]>([])
 const loading = ref(true)
 const error = ref('')
+const finalizingId = ref<string | null>(null)
 const defaultPetImage = 'https://images.unsplash.com/photo-1558788353-f76d92427f16?auto=format&fit=crop&w=320&q=80'
 
 function formatDate(timestamp: number): string {
@@ -39,6 +40,23 @@ async function updateReadState(notification: AppNotification, read: boolean) {
     notification.read = previousState
     error.value = result.error || 'No se pudo actualizar la notificación.'
   }
+}
+
+async function saveInHistory(notification: AppNotification) {
+  if (!currentUser || finalizingId.value) return
+  finalizingId.value = notification.id
+  const result = await finalizeNotification(currentUser.id, notification.id)
+  if (result.success) {
+    notifications.value = notifications.value.filter((item) => item.id !== notification.id)
+  } else {
+    error.value = result.error || 'No se pudo marcar el reporte como finalizado.'
+  }
+  finalizingId.value = null
+}
+
+function Notification_report(notification: AppNotification) {
+  // logig here
+  console.log('Reportando notificación:', notification.id)
 }
 
 onMounted(async () => {
@@ -96,6 +114,18 @@ onMounted(async () => {
         </div>
 
         <p class="notification-card__description">{{ notificationDescription(notification) }}</p>
+        <div v-if="notification.agentReport" class="notification-analysis">
+          <strong>Análisis de las fotografías</strong>
+          <p>{{ notification.agentReport }}</p>
+        </div>
+        <div v-if="notification.evidenceImages?.length" class="notification-evidence">
+          <strong>Evidencia adjunta</strong>
+          <div class="notification-evidence__images">
+            <a v-for="(image, index) in notification.evidenceImages || []" :key="image.path" :href="image.url" target="_blank" rel="noopener">
+              <img :src="image.url" :alt="`Evidencia ${index + 1} de la notificación`" />
+            </a>
+          </div>
+        </div>
 
         <div class="notification-card__meta">
           <span v-if="notification.senderName"><strong>Remitente:</strong> {{ notification.senderName }}</span>
@@ -111,12 +141,22 @@ onMounted(async () => {
         <div class="notification-card__actions">
           <button
             type="button"
+            class="primary-button notification-action notification-action--finish"
+            :disabled="finalizingId === notification.id"
+            @click="saveInHistory(notification)"
+          >
+            Marcar como finalizado
+          </button>
+          
+          <button
+            type="button"
             class="primary-button notification-action"
             :disabled="notification.read"
             @click="updateReadState(notification, true)"
           >
             Marcar como leída
           </button>
+          
           <button
             type="button"
             class="secondary-button notification-action"
@@ -125,12 +165,19 @@ onMounted(async () => {
           >
             Desmarcar
           </button>
+          
+          <button
+            type="button"
+            class="danger-button notification-action"
+            @click="Notification_report(notification)"
+          >
+            Reportar
+          </button>
 
         </div>
       </article>
     </div>
   </section>
-
 </template>
 
 <style scoped>
@@ -247,6 +294,42 @@ onMounted(async () => {
   overflow-wrap: anywhere;
 }
 
+.notification-analysis {
+  margin: 14px 0;
+  border-left: 3px solid #6c9b57;
+  padding: 10px 13px;
+  background: #f1f8ed;
+  color: #40564a;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.notification-analysis p {
+  margin: 5px 0 0;
+  white-space: pre-line;
+}
+
+.notification-evidence {
+  margin: 14px 0;
+  color: #40564a;
+  font-size: 12px;
+}
+
+.notification-evidence__images {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+  max-width: 360px;
+}
+
+.notification-evidence__images img {
+  width: 100%;
+  height: 130px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
 .notification-card__meta,
 .notification-card__contact {
   flex-wrap: wrap;
@@ -287,6 +370,19 @@ onMounted(async () => {
   cursor: not-allowed;
   opacity: .45;
   transform: none;
+}
+
+/* CLASE NUEVA PARA 'MARCAR COMO FINALIZADO' */
+.notification-action--finish {
+  background-color: #253b2f;
+  color: #ffffff;
+  border: 1px solid #253b2f;
+  font-weight: bold;
+}
+
+.notification-action--finish:hover {
+  background-color: #1a2921;
+  border-color: #1a2921;
 }
 
 .notification-action--delete {

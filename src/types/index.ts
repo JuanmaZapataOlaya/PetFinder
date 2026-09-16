@@ -45,6 +45,24 @@ export interface AppNotification {
   senderPhone?: string;
   senderEmail?: string;
   petImage?: string;
+  evidenceImages: NotificationEvidenceImage[];
+  agentReport?: string;
   createdAt: number;
   read: boolean;
+  finalizado: boolean;
+}
+
+export interface NotificationEvidenceImage {
+  url: string;
+  path: string;
+  contentType: string;
+}
+
+export interface PetHistoryRecord {
+  id: string;
+  reportId: number;
+  finalizedAt: number;
+  pet: PetTicket;
+  reporterName: string;
+  recipientName: string;
 }

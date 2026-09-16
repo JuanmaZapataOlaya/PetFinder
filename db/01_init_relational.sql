@@ -158,8 +158,10 @@ CREATE TABLE app_notifications (
     sender_phone TEXT,
     sender_email TEXT,
     pet_image TEXT,
+    evidence_images JSONB NOT NULL DEFAULT '[]'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     read BOOLEAN NOT NULL DEFAULT FALSE,
+    finalizado BOOLEAN NOT NULL DEFAULT FALSE,
     CHECK (sender_user_id IS NULL OR recipient_user_id <> sender_user_id)
 );
 
