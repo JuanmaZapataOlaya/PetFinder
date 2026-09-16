@@ -9,6 +9,7 @@ export interface AuthUser {
   verified: boolean
   provider: 'password' | 'google' | 'apple'
   photoUrl?: string
+  phoneNumber?: string
 }
 
 export const AUTH_STATE_CHANGED_EVENT = 'petfinder:auth-changed'
@@ -24,6 +25,7 @@ function mapUser(user: User | null, profile?: { name?: string; photo_url?: strin
     verified: Boolean(user.email_confirmed_at),
     provider,
     photoUrl: profile?.photo_url || user.user_metadata.avatar_url,
+    phoneNumber: user.user_metadata.phone_number,
   }
 }
 
@@ -48,11 +50,15 @@ export async function initializeAuth() {
   })
 }
 
-export async function register(name: string, email: string, password: string) {
+export async function register(name: string, email: string, password: string, phoneNumber: string) {
+  const normalizedPhone = phoneNumber.trim()
+  if (!/^\+[\d ]+$/.test(normalizedPhone) || normalizedPhone.replace(/\D/g, '').length < 8 || normalizedPhone.replace(/\D/g, '').length > 15) {
+    throw new Error('Ingresa un número de teléfono válido.')
+  }
   const { data, error } = await supabase.auth.signUp({
     email: email.trim().toLowerCase(),
     password,
-    options: { data: { name: name.trim() } },
+    options: { data: { name: name.trim(), phone_number: normalizedPhone } },
   })
   if (error) throw error
   const user = mapUser(data.user)

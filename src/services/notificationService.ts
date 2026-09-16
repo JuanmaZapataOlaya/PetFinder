@@ -135,5 +135,19 @@ export async function sendContactRequest(payload: Omit<AppNotification, 'id' | '
       imageUrls: payload.evidenceImages.map((image) => image.url),
     },
   })
-  return agentError ? { success: false, error: agentError.message } : { success: true }
+  if (agentError) {
+    let errorMessage = agentError.message
+    const context = (agentError as { context?: Response }).context
+    if (context) {
+      try {
+        const responseBody = await context.clone().json() as { error?: string }
+        if (responseBody.error) errorMessage = responseBody.error
+      } catch {
+      }
+    }
+
+    await supabase.from('app_notifications').delete().eq('id', data.id).eq('sender_user_id', payload.senderUserId)
+    return { success: false, error: errorMessage || 'Las evidencias no pudieron validarse.' }
+  }
+  return { success: true }
 }

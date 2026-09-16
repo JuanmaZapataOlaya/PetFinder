@@ -37,6 +37,7 @@ const ownerContactInfo = ref<{ fullName?: string; phoneNumber?: string; email?: 
 const showContactForm = ref(false)
 const contactMessage = ref('')
 const evidenceFiles = ref<File[]>([])
+const contactDataConsent = ref(false)
 const sendingContact = ref(false)
 const feedback = ref({ text: '', isError: false })
 const currentUser = computed(() => getCurrentUser())
@@ -105,6 +106,7 @@ watch(selectedTicket, async (newTicket) => {
   showContactForm.value = false
   contactMessage.value = ''
   evidenceFiles.value = []
+  contactDataConsent.value = false
   feedback.value = { text: '', isError: false }
   if (newTicket) {
     const contact = await getContactInfo(newTicket.ownerId)
@@ -138,6 +140,10 @@ async function submitContact() {
     feedback.value = { text: 'Debes adjuntar exactamente 2 fotografías como evidencia.', isError: true }
     return
   }
+  if (!contactDataConsent.value) {
+    feedback.value = { text: 'Debes aceptar compartir tus datos de contacto con el propietario.', isError: true }
+    return
+  }
   sendingContact.value = true
   try {
   const sender: Pick<ContactInfo, 'fullName' | 'phoneNumber' | 'email'> = await getContactInfo(currentUser.value.id) || {}
@@ -156,7 +162,7 @@ async function submitContact() {
     evidenceImages,
   })
   feedback.value = result.success
-    ? { text: 'Tu información de contacto fue enviada correctamente al propietario.', isError: false }
+    ? { text: 'Tu solicitud fue enviada y las evidencias fueron validadas automáticamente.', isError: false }
     : { text: result.error || 'Ocurrió un error.', isError: true }
   if (result.success) showContactForm.value = false
   } catch (error) {
@@ -250,7 +256,7 @@ async function submitContact() {
       <GoogleMapPicker :latitude="selectedTicket.latitude" :longitude="selectedTicket.longitude" :image-url="selectedTicket.image" :other-markers="otherReportsForMap" :interactive="false" height="360px" />
       <div class="detail-summary"><span>{{ selectedTicket.type }} · {{ selectedTicket.breed || 'Raza no especificada' }}</span><strong>{{ selectedTicket.color || 'Color no especificado' }}</strong><small>{{ selectedTicket.note }}</small></div>
       <div class="owner-contact"><h3>Información del Propietario</h3><div v-if="ownerContactInfo"><p><strong>Nombre:</strong> {{ ownerContactInfo.fullName || 'No especificado' }}</p><p><strong>Teléfono:</strong> {{ ownerContactInfo.phoneNumber || 'No especificado' }}</p><p><strong>Email:</strong> {{ ownerContactInfo.email || 'No especificado' }}</p></div><p v-else class="owner-contact-empty">No se encuentra información de contacto disponible.</p>
-        <div v-if="selectedTicket.ownerId !== currentUser?.id" class="contact-actions"><button v-if="!showContactForm" class="primary-button" @click="showContactForm = true">Contactar al propietario</button><form v-if="showContactForm" class="contact-form" @submit.prevent="submitContact"><label for="match-contact-message">Mensaje (Opcional)</label><textarea id="match-contact-message" v-model="contactMessage" maxlength="200" placeholder="Ej: Hola, creo haber visto a tu mascota..." /><NotificationEvidencePicker v-model="evidenceFiles" /><div class="contact-form-actions"><button type="button" class="secondary-button" @click="showContactForm = false">Cancelar</button><button type="submit" class="primary-button" :disabled="sendingContact">{{ sendingContact ? 'Enviando...' : 'Enviar solicitud' }}</button></div></form></div>
+        <div v-if="selectedTicket.ownerId !== currentUser?.id" class="contact-actions"><button v-if="!showContactForm" class="primary-button" @click="showContactForm = true">Contactar al propietario</button><form v-if="showContactForm" class="contact-form" @submit.prevent="submitContact"><label for="match-contact-message">Mensaje (Opcional)</label><textarea id="match-contact-message" v-model="contactMessage" maxlength="200" placeholder="Ej: Hola, creo haber visto a tu mascota..." /><NotificationEvidencePicker v-model="evidenceFiles" /><label class="contact-consent"><input v-model="contactDataConsent" type="checkbox" /><span>Acepto que mis datos personales de contacto sean compartidos con la persona que publicó este reporte.</span></label><div class="contact-form-actions"><button type="button" class="secondary-button" @click="showContactForm = false; contactDataConsent = false">Cancelar</button><button type="submit" class="primary-button" :disabled="sendingContact || evidenceFiles.length !== 2 || !contactDataConsent">{{ sendingContact ? 'Enviando...' : 'Enviar solicitud' }}</button></div></form></div>
         <p v-if="feedback.text" class="contact-feedback" :class="{ error: feedback.isError }" :role="feedback.isError ? 'alert' : 'status'" aria-live="polite">{{ feedback.text }}</p>
       </div>
     </section>
@@ -279,6 +285,8 @@ async function submitContact() {
 .contact-form { display: flex; flex-direction: column; gap: .5rem; border-radius: 8px; padding: 1rem; background: #f9f9f9; }
 .contact-form label { font-size: .85rem; font-weight: bold; }
 .contact-form textarea { min-height: 60px; resize: none; border: 1px solid #ccc; border-radius: 4px; padding: .5rem; font: inherit; font-size: .9rem; }
+.contact-consent { display: flex; align-items: flex-start; gap: .5rem; font-size: .8rem !important; font-weight: normal !important; line-height: 1.35; }
+.contact-consent input { flex: 0 0 auto; margin-top: .15rem; }
 .contact-form-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .5rem; }
 .contact-feedback { margin-top: 1rem !important; color: #16a34a; font-weight: bold; }
 .contact-feedback.error { color: #dc2626; }

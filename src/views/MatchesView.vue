@@ -27,6 +27,7 @@ const ownerContactInfo = ref<{ fullName?: string; phoneNumber?: string; email?: 
 const showContactForm = ref(false)
 const contactMessage = ref('')
 const evidenceFiles = ref<File[]>([])
+const contactDataConsent = ref(false)
 const sendingContact = ref(false)
 const feedback = ref({ text: '', isError: false })
 
@@ -36,6 +37,7 @@ watch(selectedTicket, async (newTicket) => {
   showContactForm.value = false
   contactMessage.value = ''
   evidenceFiles.value = []
+  contactDataConsent.value = false
   feedback.value = { text: '', isError: false }
 
   if (newTicket) {
@@ -125,6 +127,10 @@ async function submitContact() {
     feedback.value = { text: 'Debes adjuntar exactamente 2 fotografías como evidencia.', isError: true }
     return
   }
+  if (!contactDataConsent.value) {
+    feedback.value = { text: 'Debes aceptar compartir tus datos de contacto con el propietario.', isError: true }
+    return
+  }
   sendingContact.value = true
   try {
 
@@ -145,7 +151,7 @@ async function submitContact() {
   })
 
   if (result.success) {
-    feedback.value = { text: 'Tu información de contacto fue enviada correctamente al propietario.', isError: false }
+    feedback.value = { text: 'Tu solicitud fue enviada y las evidencias fueron validadas automáticamente.', isError: false }
     showContactForm.value = false
   } else {
     feedback.value = { text: result.error || 'Ocurrió un error.', isError: true }
@@ -259,9 +265,13 @@ async function submitContact() {
               placeholder="Ej: Hola, creo haber visto a tu mascota..."
             />
             <NotificationEvidencePicker v-model="evidenceFiles" />
+            <label class="contact-consent">
+              <input v-model="contactDataConsent" type="checkbox" />
+              <span>Acepto que mis datos personales de contacto sean compartidos con la persona que publicó este reporte.</span>
+            </label>
             <div class="contact-form-actions">
-              <button type="button" class="secondary-button" @click="showContactForm = false">Cancelar</button>
-              <button type="submit" class="primary-button" :disabled="sendingContact">{{ sendingContact ? 'Enviando...' : 'Enviar solicitud' }}</button>
+              <button type="button" class="secondary-button" @click="showContactForm = false; contactDataConsent = false">Cancelar</button>
+              <button type="submit" class="primary-button" :disabled="sendingContact || evidenceFiles.length !== 2 || !contactDataConsent">{{ sendingContact ? 'Enviando...' : 'Enviar solicitud' }}</button>
             </div>
           </form>
         </div>
@@ -328,6 +338,18 @@ async function submitContact() {
   resize: none;
   font: inherit;
   font-size: 0.9rem;
+}
+.contact-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: normal !important;
+  line-height: 1.35;
+}
+.contact-consent input {
+  flex: 0 0 auto;
+  margin-top: 0.15rem;
 }
 .contact-form-actions {
   display: flex;
