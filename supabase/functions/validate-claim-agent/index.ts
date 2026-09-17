@@ -74,67 +74,127 @@ function calculateCost(usage: TokenUsage, inputRate: number, outputRate: number)
   return usage.inputTokens * inputRate / 1_000_000 + usage.outputTokens * outputRate / 1_000_000
 }
 
-async function isImageRelevantToClaim(imageUrl: string, ticket: ClaimTicket): Promise<{ result: RelevanceResult; usage: TokenUsage }> {
-  const result = await generateText({
-    model: portkey(Deno.env.get('GEMINI_GATE_MODEL') || 'gemini-3.1-flash-lite'),
-    messages: [{
-      role: 'user',
-      content: [
-        {
-          type: 'text',
-          text: `¿Esta imagen muestra un animal de la especie "${ticket.type}", con pelaje o color similar a "${ticket.color}" y, cuando sea posible, rasgos compatibles con la raza "${ticket.breed}"? Compárala también con esta foto de referencia del reporte original. Responde SOLO con JSON válido: {"relevante": true|false, "razon": "..."}`,
-        },
-        { type: 'image', image: imageUrl },
-        { type: 'image', image: ticket.image },
-      ],
-    }],
-  })
-
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(result.text)
-  } catch {
-    throw new Error('El validador de imágenes devolvió una respuesta inválida')
-  }
-
-  if (
-    !parsed ||
-    typeof parsed !== 'object' ||
-    typeof (parsed as Record<string, unknown>).relevante !== 'boolean' ||
-    typeof (parsed as Record<string, unknown>).razon !== 'string'
-  ) {
-    throw new Error('El validador de imágenes devolvió un resultado incompleto')
-  }
-
-  return { result: parsed as RelevanceResult, usage: getTokenUsage(result) }
-}
-
-async function validateClaimImages(imageUrls: string[], ticket: ClaimTicket): Promise<{ result: RelevanceResult; usage: TokenUsage }> {
+async function validateImagesAreAnimals(imageUrls: string[]): Promise<{ success: boolean; usage: TokenUsage; error?: string }> {
   let usage: TokenUsage = { inputTokens: 0, outputTokens: 0 }
+
   for (const imageUrl of imageUrls) {
-    const validation = await isImageRelevantToClaim(imageUrl, ticket)
-    usage = addTokenUsage(usage, validation.usage)
-    if (!validation.result.relevante) return { result: validation.result, usage }
+    const result = await generateText({
+      model: portkey(Deno.env.get('GEMINI_GATE_MODEL') || 'gemini-3.1-flash-lite'),
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: '¿Esta imagen muestra un animal? Responde SOLO con JSON válido: {"animal": true|false}',
+          },
+          { type: 'image', image: imageUrl },
+        ],
+      }],
+    })
+
+    usage = addTokenUsage(usage, getTokenUsage(result))
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(result.text)
+    } catch {
+      return { success: false, usage, error: 'Las imagenes no corresponden a animales' }
+    }
+
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      typeof (parsed as Record<string, unknown>).animal !== 'boolean'
+    ) {
+      return { success: false, usage, error: 'Las imagenes no corresponden a animales' }
+    }
+
+    if (!(parsed as Record<string, unknown>).animal) {
+      return { success: false, usage, error: 'Las imagenes no corresponden a animales' }
+    }
   }
-  return {
-    result: { relevante: true, razon: 'Las evidencias son coherentes con el reporte original.' },
-    usage,
-  }
+
+  return { success: true, usage }
 }
 
-async function createCostRecord(notificationId: string, guardUsage: TokenUsage) {
+async function validateAnimalsMatchTicket(imageUrls: string[], ticket: ClaimTicket): Promise<{ success: boolean; usage: TokenUsage; error?: string }> {
+  let usage: TokenUsage = { inputTokens: 0, outputTokens: 0 }
+
+  for (const imageUrl of imageUrls) {
+    const result = await generateText({
+      model: portkey(Deno.env.get('GEMINI_GATE_MODEL') || 'gemini-3.1-flash-lite'),
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `¿Esta imagen muestra un animal de la especie "${ticket.type}", con pelaje o color similar a "${ticket.color}" y, cuando sea posible, rasgos compatibles con la raza "${ticket.breed}"? Compárala también con esta foto de referencia del reporte original. Responde SOLO con JSON válido: {"coincide": true|false}`,
+          },
+          { type: 'image', image: imageUrl },
+          { type: 'image', image: ticket.image },
+        ],
+      }],
+    })
+
+    usage = addTokenUsage(usage, getTokenUsage(result))
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(result.text)
+    } catch {
+      return { success: false, usage, error: 'Los animales de las fotos no corresponden con el de la publicación' }
+    }
+
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      typeof (parsed as Record<string, unknown>).coincide !== 'boolean'
+    ) {
+      return { success: false, usage, error: 'Los animales de las fotos no corresponden con el de la publicación' }
+    }
+
+    if (!(parsed as Record<string, unknown>).coincide) {
+      return { success: false, usage, error: 'Los animales de las fotos no corresponden con el de la publicación' }
+    }
+  }
+
+  return { success: true, usage }
+}
+
+async function createCostRecord(notificationId: string) {
   const { data, error } = await supabaseAdmin
     .from('claim_validation_costs')
     .insert({
       notification_id: notificationId,
-      guard_input_tokens: guardUsage.inputTokens,
-      guard_output_tokens: guardUsage.outputTokens,
-      guard_cost: calculateCost(guardUsage, GUARD_INPUT_COST_PER_MILLION, GUARD_OUTPUT_COST_PER_MILLION),
     })
     .select('id')
     .single()
   if (error) throw error
   return data.id as string
+}
+
+async function addGuardrail1Cost(costId: string, guardrail1Usage: TokenUsage) {
+  const { error } = await supabaseAdmin
+    .from('claim_validation_costs')
+    .update({
+      guardrail_1_input_tokens: guardrail1Usage.inputTokens,
+      guardrail_1_output_tokens: guardrail1Usage.outputTokens,
+      guardrail_1_cost: calculateCost(guardrail1Usage, GUARD_INPUT_COST_PER_MILLION, GUARD_OUTPUT_COST_PER_MILLION),
+    })
+    .eq('id', costId)
+  if (error) throw error
+}
+
+async function addGuardrail2Cost(costId: string, guardrail2Usage: TokenUsage) {
+  const { error } = await supabaseAdmin
+    .from('claim_validation_costs')
+    .update({
+      guardrail_2_input_tokens: guardrail2Usage.inputTokens,
+      guardrail_2_output_tokens: guardrail2Usage.outputTokens,
+      guardrail_2_cost: calculateCost(guardrail2Usage, GUARD_INPUT_COST_PER_MILLION, GUARD_OUTPUT_COST_PER_MILLION),
+    })
+    .eq('id', costId)
+  if (error) throw error
 }
 
 async function completeCostRecord(costId: string, agentUsage: TokenUsage) {
@@ -274,13 +334,18 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'No se pudo obtener la información del reporte original' }, 500)
     }
 
-    const relevance = await validateClaimImages(body.imageUrls, ticket)
-    const costId = await createCostRecord(notification.id, relevance.usage)
-    if (!relevance.result.relevante) {
-      return jsonResponse({
-        error: `Las imágenes no parecen corresponder con la mascota del reporte. ${relevance.result.razon}`,
-        code: 'IRRELEVANT_EVIDENCE',
-      }, 422)
+    const costId = await createCostRecord(notification.id)
+
+    const guardrail1 = await validateImagesAreAnimals(body.imageUrls)
+    await addGuardrail1Cost(costId, guardrail1.usage)
+    if (!guardrail1.success) {
+      return jsonResponse({ error: guardrail1.error, code: 'INVALID_ANIMALS' }, 422)
+    }
+
+    const guardrail2 = await validateAnimalsMatchTicket(body.imageUrls, ticket)
+    await addGuardrail2Cost(costId, guardrail2.usage)
+    if (!guardrail2.success) {
+      return jsonResponse({ error: guardrail2.error, code: 'IRRELEVANT_EVIDENCE' }, 422)
     }
 
     console.log('[validate-claim-agent] Evaluando', body.imageUrls.length, 'imágenes')
