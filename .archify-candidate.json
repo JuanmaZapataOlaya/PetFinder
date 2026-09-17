@@ -1,0 +1,223 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "FindMyPet Frontend Architecture",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "app-shell",
+      "type": "frontend",
+      "label": "App Shell",
+      "sublabel": "Vue 3 Router",
+      "pos": [300, 50],
+      "size": [140, 50]
+    },
+    {
+      "id": "explore-view",
+      "type": "frontend",
+      "label": "Explore",
+      "sublabel": "Search map",
+      "pos": [80, 160],
+      "size": [110, 50]
+    },
+    {
+      "id": "dashboard-view",
+      "type": "frontend",
+      "label": "Dashboard",
+      "sublabel": "Alerts",
+      "pos": [230, 160],
+      "size": [110, 50]
+    },
+    {
+      "id": "auth-view",
+      "type": "frontend",
+      "label": "Auth",
+      "sublabel": "Login",
+      "pos": [380, 160],
+      "size": [110, 50]
+    },
+    {
+      "id": "reports-view",
+      "type": "frontend",
+      "label": "Reports",
+      "sublabel": "My tickets",
+      "pos": [530, 160],
+      "size": [110, 50]
+    },
+    {
+      "id": "pet-search-service",
+      "type": "backend",
+      "label": "Pet Search",
+      "sublabel": "Query",
+      "pos": [80, 300],
+      "size": [110, 50]
+    },
+    {
+      "id": "auth-service",
+      "type": "backend",
+      "label": "Auth Svc",
+      "sublabel": "Login",
+      "pos": [230, 300],
+      "size": [110, 50]
+    },
+    {
+      "id": "notification-service",
+      "type": "backend",
+      "label": "Notifications",
+      "sublabel": "Alerts",
+      "pos": [380, 300],
+      "size": [110, 50]
+    },
+    {
+      "id": "maps-api",
+      "type": "external",
+      "label": "Maps API",
+      "sublabel": "Google",
+      "pos": [530, 300],
+      "size": [110, 50]
+    },
+    {
+      "id": "supabase-client",
+      "type": "backend",
+      "label": "Supabase",
+      "sublabel": "Client SDK",
+      "pos": [230, 440],
+      "size": [110, 50]
+    },
+    {
+      "id": "supabase-backend",
+      "type": "database",
+      "label": "Supabase DB",
+      "sublabel": "Backend",
+      "pos": [380, 440],
+      "size": [110, 50]
+    },
+    {
+      "id": "oauth-providers",
+      "type": "external",
+      "label": "OAuth",
+      "sublabel": "Google, Apple",
+      "pos": [530, 440],
+      "size": [110, 50]
+    }
+  ],
+  "connections": [
+    {
+      "id": "app-explore",
+      "from": "app-shell",
+      "to": "explore-view",
+      "label": "route"
+    },
+    {
+      "id": "app-dashboard",
+      "from": "app-shell",
+      "to": "dashboard-view",
+      "label": "route"
+    },
+    {
+      "id": "app-auth",
+      "from": "app-shell",
+      "to": "auth-view",
+      "label": "route"
+    },
+    {
+      "id": "app-reports",
+      "from": "app-shell",
+      "to": "reports-view",
+      "label": "route"
+    },
+    {
+      "id": "explore-search",
+      "from": "explore-view",
+      "to": "pet-search-service",
+      "label": "call"
+    },
+    {
+      "id": "explore-maps",
+      "from": "explore-view",
+      "to": "maps-api",
+      "label": "use"
+    },
+    {
+      "id": "dashboard-notif",
+      "from": "dashboard-view",
+      "to": "notification-service",
+      "label": "fetch"
+    },
+    {
+      "id": "auth-login",
+      "from": "auth-view",
+      "to": "auth-service",
+      "label": "call"
+    },
+    {
+      "id": "search-api",
+      "from": "pet-search-service",
+      "to": "supabase-client",
+      "label": "query"
+    },
+    {
+      "id": "notif-api",
+      "from": "notification-service",
+      "to": "supabase-client",
+      "label": "fetch"
+    },
+    {
+      "id": "auth-api",
+      "from": "auth-service",
+      "to": "supabase-client",
+      "label": "delegate"
+    },
+    {
+      "id": "client-backend",
+      "from": "supabase-client",
+      "to": "supabase-backend",
+      "label": "REST/Auth",
+      "variant": "emphasis"
+    },
+    {
+      "id": "backend-oauth",
+      "from": "supabase-backend",
+      "to": "oauth-providers",
+      "label": "OAuth",
+      "variant": "security"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Primary Path: Pet Search",
+      "items": [
+        "User navigates Explore Reports",
+        "Component calls petSearchService.searchPets(query)",
+        "Service invokes Supabase Edge Function",
+        "Results mapped to PetTicket objects",
+        "Map rendered with Google Maps API"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Auth Flow",
+      "items": [
+        "Email/password or OAuth (Google, Apple)",
+        "Auth Service delegates to Supabase",
+        "Profiles in 'profiles' table",
+        "currentUser ref synced on state change",
+        "Router guards authenticated routes"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Supabase Backend",
+      "items": [
+        "PostgreSQL: pet_tickets, profiles, notifications",
+        "Auth & session management",
+        "Edge Functions: search, notifications",
+        "Storage: images, evidence",
+        "OAuth integration"
+      ]
+    }
+  ]
+}
