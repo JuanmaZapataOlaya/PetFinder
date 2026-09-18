@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { marked } from 'npm:marked'
+import { marked } from 'marked'
 import { finalizeNotification, getNotifications, updateNotificationRead } from '@/services/notificationService'
 import { getCurrentUser } from '@/services/authService'
 import type { AppNotification } from '@/types'
