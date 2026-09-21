@@ -9,9 +9,12 @@ from urllib.request import Request, urlopen
 import numpy as np
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field, field_validator, model_validator
 from turbovec import IdMapIndex
 
+
+load_dotenv(Path(__file__).with_name(".env"))
 
 VECTOR_DIMENSION = int(os.getenv("VECTOR_DIMENSION", "1536"))
 BIT_WIDTH = int(os.getenv("TURBOVEC_BIT_WIDTH", "4"))

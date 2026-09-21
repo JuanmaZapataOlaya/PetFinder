@@ -2,3 +2,4 @@ fastapi==0.116.1
 numpy==2.3.3
 turbovec==1.0.0
 uvicorn[standard]==0.35.0
+python-dotenv==1.1.1

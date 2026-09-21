@@ -16,13 +16,10 @@ El indice se guarda en `data/pet_tickets.tvim`. Se puede cambiar con `TURBOVEC_I
 
 Configura `TURBOVEC_SYNC_TOKEN` con un secreto largo y aleatorio. Cuando esta variable existe, `/add` y `/search` requieren el header `x-turbovec-token`. Configura el mismo secreto en los secrets de Supabase junto con `TURBOVEC_URL`, usando la URL publica del tunnel de Cloudflare.
 
-Configura tambien `PORTKEY_API_KEY` y `PORTKEY_BASE_URL` en el proceso Python. La ruta `/search` es publica para que el frontend pueda usarla cuando Supabase no responde; `/add` sigue protegido por `TURBOVEC_SYNC_TOKEN`. Puedes partir de `.env.example` y cargarlo antes de arrancar:
+Configura tambien `PORTKEY_API_KEY` y `PORTKEY_BASE_URL` en `.env`. El servicio carga ese archivo automaticamente al iniciar; las variables exportadas en el entorno tienen prioridad. La ruta `/search` es publica para que el frontend pueda usarla cuando Supabase no responde; `/add` sigue protegido por `TURBOVEC_SYNC_TOKEN`.
 
 ```sh
 cp .env.example .env
-set -a
-. .env
-set +a
 uvicorn app:app --host 127.0.0.1 --port 8001 --reload
 ```
 
