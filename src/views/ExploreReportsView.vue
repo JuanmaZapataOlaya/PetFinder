@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import GoogleMapPicker from '@/components/GoogleMapPicker.vue'
 import Icon from '@/components/Icon.vue'
 import NotificationEvidencePicker from '@/components/NotificationEvidencePicker.vue'
@@ -21,6 +22,7 @@ const RADIUS_OPTIONS = [
   { label : 'INF', value : 0}
 ]
 
+const route = useRoute()
 const search = ref('')
 const searchResults = ref<PetTicket[]>([])
 const searchError = ref('')
@@ -59,7 +61,12 @@ async function submitSearch() {
   }
 }
 
-onMounted(() => { void submitSearch() })
+watch(() => route.query.q, (value) => {
+  if (typeof value === 'string') {
+    search.value = value
+    void submitSearch()
+  }
+}, { immediate: true })
 
 function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const earthRadius = 6_371_000
