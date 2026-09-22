@@ -3,9 +3,16 @@
 
 import { Profanity } from '@2toad/profanity';
 
-const profanity = new Profanity({
-  languages: ['es'],
-});
+const profanity = new Profanity({ languages: ['es', 'en'] })
+
+// Remove animal/color terms that appear in the Spanish profanity list but are
+// legitimate search terms in a pet-finder context.
+profanity.removeWords([
+  'perro', 'perra', 'perras',
+  'negro', 'negros',
+  'cabra', 'gallos', 'colibrí',
+  'bigotes', 'hueso',
+])
 
 function calculateShannonEntropy(text: string): number {
   if (!text.length) return 0

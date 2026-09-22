@@ -1,5 +1,9 @@
+// ABOUTME: Executes pet search queries against the vector search backend
+// ABOUTME: Validates input through guardrails before invoking the embedding model
+
 import type { PetTicket } from '@/types'
 import { supabase } from '@/services/supabase'
+import { validateSearchInput } from '@/services/searchGuardrailService'
 
 const turbovecUrl = import.meta.env.VITE_TURBOVEC_URL as string | undefined
 
@@ -44,6 +48,9 @@ function mapSearchTicket(row: SearchTicketRow): PetTicket {
 }
 
 export async function searchPets(query: string): Promise<PetTicket[]> {
+  const validation = validateSearchInput(query)
+  if (!validation.valid) throw new Error(validation.error)
+
   const { data, error } = await supabase.functions.invoke<{ results: SearchTicketRow[] }>('search-pets', {
     body: { query, limit: 50 },
   })
