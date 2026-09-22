@@ -96,7 +96,7 @@ async function saveContactInfo() {
         <input id="fullName" v-model="form.fullName" type="text" placeholder="Ej. Juan Pérez" />
       </div>
       
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+      <div class="age-phone-grid">
         <div class="form-field">
           <label for="age">Edad (Opcional)</label>
           <input id="age" v-model="form.age" type="number" />
@@ -119,7 +119,7 @@ async function saveContactInfo() {
 
       <div class="form-field">
         <label>Ubicación General (Opcional)</label>
-        <div style="border: 1px solid #ccc; border-radius: 8px; overflow: hidden;">
+        <div class="map-wrap">
           <GoogleMapPicker
             :latitude="form.latitude"
             :longitude="form.longitude"
@@ -130,7 +130,7 @@ async function saveContactInfo() {
         </div>
       </div>
 
-      <p v-if="feedbackMessage" style="color: #16a34a; margin-bottom: 1rem; font-weight: 500;">{{ feedbackMessage }}</p>
+      <p v-if="feedbackMessage" class="feedback-message">{{ feedbackMessage }}</p>
 
       <button type="submit" class="primary-button" :disabled="loading">
         {{ loading ? 'Guardando...' : 'Guardar Información' }}
@@ -138,3 +138,29 @@ async function saveContactInfo() {
     </form>
   </section>
 </template>
+
+<style scoped>
+.age-phone-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.map-wrap {
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.feedback-message {
+  color: #16a34a;
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+
+@media (max-width: 650px) {
+  .age-phone-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
