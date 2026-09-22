@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import ChatWidget from '@/components/ChatWidget.vue'
@@ -10,6 +10,7 @@ const router = useRouter()
 const activeNav = computed(() => String(route.meta.label || 'Resumen'))
 const user = ref(getCurrentUser())
 const avatarFailed = ref(false)
+const menuOpen = ref(false)
 const fallbackAvatar = '/avatar-default.svg'
 const avatarUrl = computed(() => avatarFailed.value || !user.value?.photoUrl ? fallbackAvatar : user.value.photoUrl)
 
@@ -21,6 +22,8 @@ const navigation = [
   { label: 'Historial de mascotas', path: '/historial-mascotas', icon: 'paw' },
   { label: 'Información personal', path: '/contact-info', icon: 'message' },
 ]
+
+watch(route, () => { menuOpen.value = false })
 
 function syncUser() {
   user.value = getCurrentUser()
@@ -51,19 +54,55 @@ onBeforeUnmount(() => {
 <template>
   <slot v-if="!user" />
   <div v-else class="app-shell">
-    <aside class="sidebar">
+    <div v-if="menuOpen" class="sidebar-backdrop" aria-hidden="true" @click="menuOpen = false" />
+    <aside class="sidebar" :class="{ 'sidebar--open': menuOpen }">
       <RouterLink class="brand" to="/resumen"><span class="brand-mark"><Icon name="paw" :size="18" /></span><span>PetFinder</span></RouterLink>
       <div class="nav-label">Espacio personal</div>
       <nav class="nav-list" aria-label="Navegación principal">
         <RouterLink v-for="item in navigation" :key="item.path" :to="item.path" class="nav-item"><Icon :name="item.icon" :size="17" /><span>{{ item.label }}</span></RouterLink>
       </nav>
       <div class="sidebar-spacer" />
-      <div class="user-mini"><img class="avatar avatar-image" :src="avatarUrl" :alt="`Foto de ${user?.name || 'Usuario'}`" @error="handleAvatarError" /><div><strong>{{ user?.name || 'Usuario' }}</strong><span>Cuenta personal</span></div><button class="logout-button" title="Cerrar sesión" @click="handleLogout">Salir</button></div>
+      <div class="user-mini">
+        <img class="avatar avatar-image" :src="avatarUrl" :alt="`Foto de ${user?.name || 'Usuario'}`" @error="handleAvatarError" />
+        <div><strong>{{ user?.name || 'Usuario' }}</strong><span>Cuenta personal</span></div>
+        <button class="logout-button" title="Cerrar sesión" @click="handleLogout">Salir</button>
+      </div>
     </aside>
     <main class="main-content">
-      <header class="topbar"><span class="crumb">PetFinder <b>/</b> {{ activeNav }}</span><div class="top-actions"><button type="button" class="icon-button" aria-label="Abrir notificaciones" @click="router.push({ name: 'Notifications' })"><Icon name="bell" :size="19" /><i class="notification-dot" /></button><img class="avatar avatar-image" :src="avatarUrl" :alt="`Foto de ${user?.name || 'Usuario'}`" @error="handleAvatarError" /></div></header>
+      <header class="topbar">
+        <div class="topbar-start">
+          <button type="button" class="menu-toggle icon-button" aria-label="Abrir menú de navegación" @click="menuOpen = !menuOpen">
+            <Icon :name="menuOpen ? 'x' : 'menu'" :size="22" />
+          </button>
+          <span class="crumb">PetFinder <b>/</b> {{ activeNav }}</span>
+        </div>
+        <div class="top-actions">
+          <button type="button" class="icon-button" aria-label="Abrir notificaciones" @click="router.push({ name: 'Notifications' })">
+            <Icon name="bell" :size="19" /><i class="notification-dot" />
+          </button>
+          <img class="avatar avatar-image" :src="avatarUrl" :alt="`Foto de ${user?.name || 'Usuario'}`" @error="handleAvatarError" />
+        </div>
+      </header>
       <slot />
     </main>
     <ChatWidget />
   </div>
 </template>
+
+<style scoped>
+.topbar-start {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.menu-toggle {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .menu-toggle {
+    display: grid;
+  }
+}
+</style>
