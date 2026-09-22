@@ -225,7 +225,8 @@ function formatDistance(meters: number): string {
 </template>
 
 <style scoped>
-.unified-explore { max-width: 1320px; margin: 0 auto; }
+.unified-explore { max-width: 1320px; min-width: 0; margin: 0 auto; }
+.explore-layout, .public-report-grid, .match-grid { min-width: 0; }
 .explore-toolbar { grid-template-columns: minmax(220px, 1fr) auto 150px 150px; }
 .explore-toolbar .search-submit:disabled { opacity: .6; cursor: wait; }
 .search-error { margin: -14px 0 20px; color: #b5533e; font-size: 12px; }
@@ -243,5 +244,14 @@ function formatDistance(meters: number): string {
 .owner-contact p { margin: 0; font-size: .9rem; }
 .owner-contact-empty { color: #666; font-style: italic; }
 .contact-actions { margin-top: 1rem; }
+@media (max-width: 950px) {
+  .explore-layout { grid-template-columns: 1fr; }
+  .explore-map-panel { padding-left: 0; }
+  .match-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 650px) { .unified-section-heading { align-items: flex-start; flex-direction: column; gap: 8px; } .explore-section, .matches-section { padding-top: 22px; } .explore-toolbar { grid-template-columns: 1fr; } .explore-toolbar .search-submit { width: 100%; justify-content: center; } }
+@media (max-width: 650px) {
+  .public-report-grid, .match-grid { grid-template-columns: minmax(0, 1fr); }
+  .public-report-card > img { height: 190px; }
+}
 </style>
