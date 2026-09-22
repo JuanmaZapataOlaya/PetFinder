@@ -34,9 +34,11 @@ Deno.serve(async (request) => {
     const portkeyBaseUrl = Deno.env.get('PORTKEY_BASE_URL');
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseSecretKey = Deno.env.get('SECRET_KEY');
+    const turbovecUrl = Deno.env.get('TURBOVEC_URL');
+    const turbovecToken = Deno.env.get('TURBOVEC_SYNC_TOKEN');
 
     // Validación sin lanzar un Error global que colapse el worker
-    if (!portkeyApiKey || !supabaseUrl || !supabaseSecretKey || !portkeyBaseUrl) {
+    if (!portkeyApiKey || !supabaseUrl || !supabaseSecretKey || !portkeyBaseUrl || !turbovecUrl || !turbovecToken) {
       console.error('[generate-pet-embedding] Configuración incompleta: faltan variables de entorno');
       return jsonResponse({ error: 'El servidor no está configurado correctamente.' }, 500);
     }
@@ -116,7 +118,64 @@ Deno.serve(async (request) => {
         return jsonResponse({ error: 'Error guardando en la base de datos' }, 500);
       }
 
-      console.log('[generate-pet-embedding] Paso 10: Proceso completado con éxito');
+      console.log('[generate-pet-embedding] Paso 10: sincronizando vector con TurboVec');
+      let turbovecResponse: Response | null = null;
+      let lastTurboVecError = 'Error desconocido';
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        const turbovecController = new AbortController();
+        const turbovecTimeoutId = setTimeout(() => turbovecController.abort(), 8_000);
+        try {
+          turbovecResponse = await fetch(`${turbovecUrl.replace(/\/+$/, '')}/add`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-turbovec-token': turbovecToken,
+            },
+            body: JSON.stringify({
+              vectors: [{
+                id: record.id,
+                vector: embedding,
+                metadata: {
+                  id: record.id,
+                  owner_id: record.owner_id,
+                  name: record.name,
+                  type: record.type,
+                  kind: record.kind,
+                  status: record.status,
+                  location: record.location,
+                  latitude: record.latitude,
+                  longitude: record.longitude,
+                  image: record.image,
+                  color: record.color,
+                  breed: record.breed,
+                  note: record.note,
+                  match_score: record.match_score,
+                  reported_at: record.reported_at,
+                  created_at: record.created_at,
+                  updated_at: record.updated_at,
+                },
+              }],
+            }),
+            signal: turbovecController.signal,
+          });
+          if (turbovecResponse.ok) break;
+          lastTurboVecError = `HTTP ${turbovecResponse.status}`;
+        } catch (error) {
+          lastTurboVecError = error instanceof DOMException && error.name === 'AbortError'
+            ? 'timeout'
+            : error instanceof Error ? error.message : 'Error desconocido';
+        } finally {
+          clearTimeout(turbovecTimeoutId);
+        }
+        console.warn(`[generate-pet-embedding] Reintento TurboVec ${attempt}/3: ${lastTurboVecError}`);
+      }
+
+      if (!turbovecResponse?.ok) {
+        console.error('[generate-pet-embedding] No se pudo sincronizar con TurboVec', { lastTurboVecError });
+        return jsonResponse({ error: 'El vector se guardó en Supabase, pero no pudo sincronizarse con TurboVec.' }, 502);
+      }
+
+      console.log('[generate-pet-embedding] Paso 11: Proceso completado con éxito');
       return jsonResponse({ success: true, message: `Embedding generado y guardado para mascota ID: ${record.id}` });
       
     } finally {

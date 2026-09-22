@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { marked } from 'marked'
 import { finalizeNotification, getNotifications, updateNotificationRead } from '@/services/notificationService'
 import { getCurrentUser } from '@/services/authService'
 import type { AppNotification } from '@/types'
@@ -10,6 +11,10 @@ const loading = ref(true)
 const error = ref('')
 const finalizingId = ref<string | null>(null)
 const defaultPetImage = 'https://images.unsplash.com/photo-1558788353-f76d92427f16?auto=format&fit=crop&w=320&q=80'
+
+function renderMarkdown(markdown: string): string {
+  return marked(markdown) as string
+}
 
 function formatDate(timestamp: number): string {
   return new Intl.DateTimeFormat('es-CO', {
@@ -116,7 +121,7 @@ onMounted(async () => {
         <p class="notification-card__description">{{ notificationDescription(notification) }}</p>
         <div v-if="notification.agentReport" class="notification-analysis">
           <strong>Análisis de las fotografías</strong>
-          <p>{{ notification.agentReport }}</p>
+          <div v-html="renderMarkdown(notification.agentReport)" class="notification-analysis__content" />
         </div>
         <div v-if="notification.evidenceImages?.length" class="notification-evidence">
           <strong>Evidencia adjunta</strong>
@@ -304,9 +309,23 @@ onMounted(async () => {
   line-height: 1.55;
 }
 
-.notification-analysis p {
+.notification-analysis__content {
   margin: 5px 0 0;
-  white-space: pre-line;
+}
+
+.notification-analysis__content p {
+  margin: 5px 0;
+  line-height: 1.55;
+}
+
+.notification-analysis__content ul,
+.notification-analysis__content ol {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.notification-analysis__content li {
+  margin: 4px 0;
 }
 
 .notification-evidence {

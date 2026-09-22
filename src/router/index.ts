@@ -21,9 +21,9 @@ const router = createRouter({
 })
 
 router.beforeEach((to) => {
-  if (to.meta.requiresAuth && !getCurrentUser()) return { name: 'login', query: { redirect: to.fullPath } }
-  if (to.meta.label && !getCurrentUser()) return { name: 'login', query: { redirect: to.fullPath } }
-  if (to.name === 'login' && getCurrentUser()) return '/resumen'
+  const user = getCurrentUser()
+  if ((to.meta.requiresAuth || to.meta.label) && !user) return { name: 'login', query: { redirect: to.fullPath } }
+  if (to.name === 'login' && user) return '/resumen'
 })
 
 export default router

@@ -14,6 +14,7 @@ export interface AuthUser {
 
 export const AUTH_STATE_CHANGED_EVENT = 'petfinder:auth-changed'
 export const currentUser = ref<AuthUser | null>(null)
+const CACHED_USER_KEY = 'petfinder.auth.user'
 
 function mapUser(user: User | null, profile?: { name?: string; photo_url?: string } | null): AuthUser | null {
   if (!user) return null
@@ -39,14 +40,61 @@ function notifyAuthStateChanged() {
   window.dispatchEvent(new Event(AUTH_STATE_CHANGED_EVENT))
 }
 
+function readCachedUser() {
+  try {
+    const cachedUser = localStorage.getItem(CACHED_USER_KEY)
+    return cachedUser ? JSON.parse(cachedUser) as AuthUser : null
+  } catch {
+    return null
+  }
+}
+
+function cacheUser(user: AuthUser | null) {
+  if (!user) return
+  localStorage.setItem(CACHED_USER_KEY, JSON.stringify(user))
+}
+
 export async function initializeAuth() {
-  const { data: { session } } = await supabase.auth.getSession()
-  currentUser.value = await loadProfile(session?.user || null)
-  supabase.auth.onAuthStateChange((_event: AuthChangeEvent, nextSession: Session | null) => {
-    void loadProfile(nextSession?.user || null).then((user) => {
-      currentUser.value = user
-      notifyAuthStateChanged()
-    })
+  const cachedUser = readCachedUser()
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) {
+      currentUser.value = cachedUser
+    } else {
+      currentUser.value = mapUser(session.user)
+      cacheUser(currentUser.value)
+      try {
+        currentUser.value = await loadProfile(session.user)
+        cacheUser(currentUser.value)
+      } catch (error) {
+        console.error('No se pudo cargar el perfil de Supabase.', error)
+      }
+    }
+  } catch (error) {
+    console.error('No se pudo comprobar la sesión de Supabase.', error)
+    currentUser.value = cachedUser
+  }
+
+  supabase.auth.onAuthStateChange((event: AuthChangeEvent, nextSession: Session | null) => {
+    if (!nextSession) {
+      if (event === 'SIGNED_OUT') {
+        currentUser.value = null
+        localStorage.removeItem(CACHED_USER_KEY)
+        notifyAuthStateChanged()
+      }
+      return
+    }
+
+    currentUser.value = mapUser(nextSession.user)
+    cacheUser(currentUser.value)
+    notifyAuthStateChanged()
+    void loadProfile(nextSession.user)
+      .then((user) => {
+        currentUser.value = user
+        cacheUser(user)
+        notifyAuthStateChanged()
+      })
+      .catch((error) => console.error('No se pudo cargar el perfil de Supabase.', error))
   })
 }
 
@@ -70,6 +118,7 @@ export async function login(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password })
   if (error) throw error
   currentUser.value = await loadProfile(data.user)
+  cacheUser(currentUser.value)
   return currentUser.value
 }
 
@@ -78,8 +127,14 @@ export function getCurrentUser() {
 }
 
 export async function logout() {
-  const { error } = await supabase.auth.signOut()
-  if (error) throw error
+  try {
+    const { error } = await supabase.auth.signOut()
+    if (error) throw error
+  } finally {
+    currentUser.value = null
+    localStorage.removeItem(CACHED_USER_KEY)
+    notifyAuthStateChanged()
+  }
 }
 
 export async function verifyEmail() {

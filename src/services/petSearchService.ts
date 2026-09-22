@@ -1,6 +1,8 @@
 import type { PetTicket } from '@/types'
 import { supabase } from '@/services/supabase'
 
+const turbovecUrl = import.meta.env.VITE_TURBOVEC_URL as string | undefined
+
 type SearchTicketRow = {
   id: number
   owner_id: string
@@ -45,6 +47,19 @@ export async function searchPets(query: string): Promise<PetTicket[]> {
   const { data, error } = await supabase.functions.invoke<{ results: SearchTicketRow[] }>('search-pets', {
     body: { query, limit: 50 },
   })
-  if (error) throw error
-  return (data?.results || []).map(mapSearchTicket)
+  if (!error) return (data?.results || []).map(mapSearchTicket)
+
+  if (!turbovecUrl) throw error
+  const fallbackResponse = await fetch(`${turbovecUrl.replace(/\/+$/, '')}/search`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, limit: 50 }),
+  })
+  if (!fallbackResponse.ok) throw error
+
+  const fallbackBody = await fallbackResponse.json() as { results?: Array<{ record?: SearchTicketRow }> }
+  return (fallbackBody.results || [])
+    .map((result) => result.record)
+    .filter((row): row is SearchTicketRow => Boolean(row))
+    .map(mapSearchTicket)
 }
