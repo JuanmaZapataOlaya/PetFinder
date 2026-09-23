@@ -110,7 +110,6 @@ async function sendMessage() {
     handleAgentAction(response.action, response.payload)
   } catch (error) {
     agentError.value = error instanceof Error ? error.message : 'No fue posible obtener una respuesta del asistente.'
-    addAssistantMessage(agentError.value)
   } finally {
     isAgentLoading.value = false
   }
@@ -196,9 +195,11 @@ onBeforeUnmount(() => {
           <p>{{ message.content }}</p>
           <time :datetime="message.timestamp.toISOString()">{{ formatMessageTime(message.timestamp) }}</time>
         </div>
-        <p v-if="isAgentLoading" class="chat-status" aria-live="polite">El asistente está escribiendo...</p>
-        <p v-if="agentError && !isAgentLoading" class="chat-status chat-status--error" role="alert">{{ agentError }}</p>
       </div>
+    </div>
+    <div v-if="isAgentLoading || agentError" class="chat-status-area">
+      <p v-if="isAgentLoading" class="chat-status" role="status">El asistente está escribiendo...</p>
+      <p v-else-if="agentError" class="chat-status chat-status--error" role="alert">{{ agentError }}</p>
     </div>
     <form class="chat-composer" @submit.prevent="sendMessage">
       <textarea v-model="draftMessage" rows="1" aria-label="Escribe tu mensaje" placeholder="Escribe tu mensaje..." @keydown="handleMessageKeydown" />
@@ -301,7 +302,8 @@ onBeforeUnmount(() => {
 .chat-messages { flex: 1; overflow-y: auto; padding: 20px 15px; background: #eef4ec; }
 .chat-message { display: flex; margin-bottom: 12px; }
 .chat-message--user { justify-content: flex-end; }
-.chat-status { margin: 8px 4px; color: #718475; font-size: 11px; }
+.chat-status-area { flex: 0 0 auto; border-top: 1px solid #dfe8dc; padding: 8px 15px; background: #f7faf6; }
+.chat-status { margin: 0 4px; color: #718475; font-size: 11px; line-height: 1.35; }
 .chat-status--error { color: #b5533e; }
 .chat-bubble { max-width: 82%; padding: 10px 12px 7px; border-radius: 13px 13px 13px 3px; background: white; color: #34493b; box-shadow: 0 2px 6px #173c3212; }
 .chat-message--user .chat-bubble { border-radius: 13px 13px 3px 13px; background: #d9f28f; color: #173c32; }
