@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import GoogleMapPicker from '@/components/GoogleMapPicker.vue'
 import { addTicket, breedsByType, removeTicket, tickets as allTickets, updateTicket } from '@/data/tickets'
@@ -16,6 +17,8 @@ const showModal = ref(false)
 const showToast = ref(false)
 const editingTicketId = ref<number | null>(null)
 const currentUser = computed(() => getCurrentUser())
+const route = useRoute()
+const router = useRouter()
 const userTickets = computed(() => allTickets.filter((ticket) => ticket.ownerId === currentUser.value?.id))
 const filteredTickets = computed(() => userTickets.value.filter((ticket) => {
   const matchesTab = activeTab.value === 'Todas' || (activeTab.value === 'Activas' ? ticket.status === 'Activa' : ticket.status === 'Resuelta')
@@ -45,6 +48,21 @@ function openCreate() {
   descriptionError.value = ''
   showModal.value = true
 }
+onMounted(() => {
+  if (route.query.action === 'create') {
+    openCreate()
+    const queryType = route.query.type
+    const queryKind = route.query.kind
+    if (queryType === 'Perro' || queryType === 'Gato' || queryType === 'Ave' || queryType === 'Otro') {
+      reportType.value = queryType
+    }
+    if (queryKind === 'Perdida' || queryKind === 'Encontrada') reportKind.value = queryKind
+    if (typeof route.query.breed === 'string') reportBreed.value = route.query.breed
+    if (typeof route.query.color === 'string') reportColor.value = route.query.color
+    if (typeof route.query.description === 'string') reportNote.value = route.query.description
+    void router.replace({ query: {} })
+  }
+})
 function editTicket(ticket: PetTicket) {
   editingTicketId.value = ticket.id
   reportName.value = ticket.name; reportType.value = ticket.type; reportKind.value = ticket.kind; reportLocation.value = ticket.location; reportColor.value = ticket.color; reportBreed.value = ticket.breed; reportNote.value = ticket.note; imagePreview.value = ticket.image; imageFile.value = null; reportLatitude.value = ticket.latitude; reportLongitude.value = ticket.longitude
