@@ -3,14 +3,12 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import GoogleMapPicker from '@/components/GoogleMapPicker.vue'
 import Icon from '@/components/Icon.vue'
-import NotificationEvidencePicker from '@/components/NotificationEvidencePicker.vue'
+import ContactRequestForm from '@/components/ContactRequestForm.vue'
 import { tickets } from '@/data/tickets'
-import type { ContactInfo, PetTicket, PetType, TicketKind } from '@/types'
+import type { PetTicket, PetType, TicketKind } from '@/types'
 import { getCurrentUser } from '@/services/authService'
-import { sendContactRequest } from '@/services/notificationService'
 import { getContactInfo } from '@/services/contactService'
 import { searchPets } from '@/services/petSearchService'
-import { uploadNotificationEvidence } from '@/services/storageService'
 
 const RADIUS_OPTIONS = [
   { label: '500 m', value: 500 },
@@ -37,11 +35,6 @@ const refLng = ref(-99.1332)
 const selectedTicket = ref<PetTicket | null>(null)
 const ownerContactInfo = ref<{ fullName?: string; phoneNumber?: string; email?: string } | null>(null)
 const showContactForm = ref(false)
-const contactMessage = ref('')
-const evidenceFiles = ref<File[]>([])
-const contactDataConsent = ref(false)
-const sendingContact = ref(false)
-const feedback = ref({ text: '', isError: false })
 const currentUser = computed(() => getCurrentUser())
 
 const publicTickets = computed(() => searchResults.value.filter((ticket) =>
@@ -111,10 +104,6 @@ const otherReportsForMap = computed(() => {
 
 watch(selectedTicket, async (newTicket) => {
   showContactForm.value = false
-  contactMessage.value = ''
-  evidenceFiles.value = []
-  contactDataConsent.value = false
-  feedback.value = { text: '', isError: false }
   if (newTicket) {
     const contact = await getContactInfo(newTicket.ownerId)
     ownerContactInfo.value = contact ? { fullName: contact.fullName, phoneNumber: contact.phoneNumber, email: contact.email } : null
@@ -136,47 +125,6 @@ function onReferenceMove(location: { latitude: number; longitude: number }) {
 
 function formatDistance(meters: number): string {
   return meters < 1000 ? `${meters} m` : `${(meters / 1000).toFixed(1)} km`
-}
-
-async function submitContact() {
-  if (!selectedTicket.value || !currentUser.value) {
-    feedback.value = { text: 'Debes iniciar sesión para contactar al propietario.', isError: true }
-    return
-  }
-  if (evidenceFiles.value.length !== 2) {
-    feedback.value = { text: 'Debes adjuntar exactamente 2 fotografías como evidencia.', isError: true }
-    return
-  }
-  if (!contactDataConsent.value) {
-    feedback.value = { text: 'Debes aceptar compartir tus datos de contacto con el propietario.', isError: true }
-    return
-  }
-  sendingContact.value = true
-  try {
-  const sender: Pick<ContactInfo, 'fullName' | 'phoneNumber' | 'email'> = await getContactInfo(currentUser.value.id) || {}
-  const evidenceImages = await uploadNotificationEvidence(evidenceFiles.value, currentUser.value.id)
-  const result = await sendContactRequest({
-    recipientUserId: selectedTicket.value.ownerId,
-    senderUserId: currentUser.value.id,
-    reportId: selectedTicket.value.id,
-    petImage: selectedTicket.value.image,
-    type: 'CONTACT_REQUEST',
-    title: 'Nueva solicitud de contacto',
-    message: contactMessage.value,
-    senderName: sender.fullName || currentUser.value.name || 'Usuario',
-    senderPhone: sender.phoneNumber || 'No especificado',
-    senderEmail: sender.email || 'No especificado',
-    evidenceImages,
-  })
-  feedback.value = result.success
-    ? { text: 'Tu solicitud fue enviada y las evidencias fueron validadas automáticamente.', isError: false }
-    : { text: result.error || 'Ocurrió un error.', isError: true }
-  if (result.success) showContactForm.value = false
-  } catch (error) {
-    feedback.value = { text: error instanceof Error ? error.message : 'No se pudieron cargar las fotografías.', isError: true }
-  } finally {
-    sendingContact.value = false
-  }
 }
 </script>
 
@@ -263,15 +211,22 @@ async function submitContact() {
       <GoogleMapPicker :latitude="selectedTicket.latitude" :longitude="selectedTicket.longitude" :image-url="selectedTicket.image" :other-markers="otherReportsForMap" :interactive="false" height="360px" />
       <div class="detail-summary"><span>{{ selectedTicket.type }} · {{ selectedTicket.breed || 'Raza no especificada' }}</span><strong>{{ selectedTicket.color || 'Color no especificado' }}</strong><small>{{ selectedTicket.note }}</small></div>
       <div class="owner-contact"><h3>Información del Propietario</h3><div v-if="ownerContactInfo"><p><strong>Nombre:</strong> {{ ownerContactInfo.fullName || 'No especificado' }}</p><p><strong>Teléfono:</strong> {{ ownerContactInfo.phoneNumber || 'No especificado' }}</p><p><strong>Email:</strong> {{ ownerContactInfo.email || 'No especificado' }}</p></div><p v-else class="owner-contact-empty">No se encuentra información de contacto disponible.</p>
-        <div v-if="selectedTicket.ownerId !== currentUser?.id" class="contact-actions"><button v-if="!showContactForm" class="primary-button" @click="showContactForm = true">Contactar al propietario</button><form v-if="showContactForm" class="contact-form" @submit.prevent="submitContact"><label for="match-contact-message">Mensaje (Opcional)</label><textarea id="match-contact-message" v-model="contactMessage" maxlength="200" placeholder="Ej: Hola, creo haber visto a tu mascota..." /><NotificationEvidencePicker v-model="evidenceFiles" /><label class="contact-consent"><input v-model="contactDataConsent" type="checkbox" /><span>Acepto que mis datos personales de contacto sean compartidos con la persona que publicó este reporte.</span></label><div class="contact-form-actions"><button type="button" class="secondary-button" @click="showContactForm = false; contactDataConsent = false">Cancelar</button><button type="submit" class="primary-button" :disabled="sendingContact || evidenceFiles.length !== 2 || !contactDataConsent">{{ sendingContact ? 'Enviando...' : 'Enviar solicitud' }}</button></div></form></div>
-        <p v-if="feedback.text" class="contact-feedback" :class="{ error: feedback.isError }" :role="feedback.isError ? 'alert' : 'status'" aria-live="polite">{{ feedback.text }}</p>
+        <div v-if="selectedTicket.ownerId !== currentUser?.id" class="contact-actions">
+          <button v-if="!showContactForm" class="primary-button" @click="showContactForm = true">Contactar al propietario</button>
+          <ContactRequestForm
+            v-if="showContactForm"
+            :ticket="selectedTicket"
+            @close="showContactForm = false"
+          />
+        </div>
       </div>
     </section>
   </div>
 </template>
 
 <style scoped>
-.unified-explore { max-width: 1320px; margin: 0 auto; }
+.unified-explore { max-width: 1320px; min-width: 0; margin: 0 auto; }
+.explore-layout, .public-report-grid, .match-grid { min-width: 0; }
 .explore-toolbar { grid-template-columns: minmax(220px, 1fr) auto 150px 150px; }
 .explore-toolbar .search-submit:disabled { opacity: .6; cursor: wait; }
 .search-error { margin: -14px 0 20px; color: #b5533e; font-size: 12px; }
@@ -289,13 +244,14 @@ async function submitContact() {
 .owner-contact p { margin: 0; font-size: .9rem; }
 .owner-contact-empty { color: #666; font-style: italic; }
 .contact-actions { margin-top: 1rem; }
-.contact-form { display: flex; flex-direction: column; gap: .5rem; border-radius: 8px; padding: 1rem; background: #f9f9f9; }
-.contact-form label { font-size: .85rem; font-weight: bold; }
-.contact-form textarea { min-height: 60px; resize: none; border: 1px solid #ccc; border-radius: 4px; padding: .5rem; font: inherit; font-size: .9rem; }
-.contact-consent { display: flex; align-items: flex-start; gap: .5rem; font-size: .8rem !important; font-weight: normal !important; line-height: 1.35; }
-.contact-consent input { flex: 0 0 auto; margin-top: .15rem; }
-.contact-form-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .5rem; }
-.contact-feedback { margin-top: 1rem !important; color: #16a34a; font-weight: bold; }
-.contact-feedback.error { color: #dc2626; }
+@media (max-width: 950px) {
+  .explore-layout { grid-template-columns: 1fr; }
+  .explore-map-panel { padding-left: 0; }
+  .match-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 650px) { .unified-section-heading { align-items: flex-start; flex-direction: column; gap: 8px; } .explore-section, .matches-section { padding-top: 22px; } .explore-toolbar { grid-template-columns: 1fr; } .explore-toolbar .search-submit { width: 100%; justify-content: center; } }
+@media (max-width: 650px) {
+  .public-report-grid, .match-grid { grid-template-columns: minmax(0, 1fr); }
+  .public-report-card > img { height: 190px; }
+}
 </style>
