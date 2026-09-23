@@ -10,6 +10,9 @@ import { getCurrentUser } from '@/services/authService'
 import { getContactInfo } from '@/services/contactService'
 import { searchPets } from '@/services/petSearchService'
 
+const DEFAULT_SEARCH_QUERY = 'findall'
+const RESULTS_PER_PAGE = 6
+
 const RADIUS_OPTIONS = [
   { label: '500 m', value: 500 },
   { label: '1 km', value: 1000 },
@@ -25,6 +28,7 @@ const search = ref('')
 const searchResults = ref<PetTicket[]>([])
 const searchError = ref('')
 const searching = ref(false)
+const currentPage = ref(1)
 const kind = ref<'Todos' | TicketKind>('Todos')
 const type = ref<'Todas' | PetType>('Todas')
 const filterKind = ref<'Todos' | TicketKind>('Todos')
@@ -42,11 +46,19 @@ const publicTickets = computed(() => searchResults.value.filter((ticket) =>
   (type.value === 'Todas' || ticket.type === type.value)
 ))
 
-async function submitSearch() {
+const totalPages = computed(() => Math.max(1, Math.ceil(publicTickets.value.length / RESULTS_PER_PAGE)))
+
+const paginatedPublicTickets = computed(() => {
+  const start = (currentPage.value - 1) * RESULTS_PER_PAGE
+  return publicTickets.value.slice(start, start + RESULTS_PER_PAGE)
+})
+
+async function submitSearch(query: string) {
   searching.value = true
   searchError.value = ''
   try {
-    searchResults.value = await searchPets(search.value)
+    const results = await searchPets(query)
+    searchResults.value = results
   } catch (error) {
     searchError.value = error instanceof Error ? error.message : 'No fue posible realizar la búsqueda.'
   } finally {
@@ -54,11 +66,31 @@ async function submitSearch() {
   }
 }
 
+function handleSearchSubmit() {
+  void submitSearch(search.value)
+}
+
+function goToPreviousPage() {
+  if (currentPage.value > 1) currentPage.value -= 1
+}
+
+function goToNextPage() {
+  if (currentPage.value < totalPages.value) currentPage.value += 1
+}
+
+watch([searchResults, kind, type], () => {
+  currentPage.value = 1
+})
+
 watch(() => route.query.q, (value) => {
-  if (typeof value === 'string') {
+  if (typeof value === 'string' && value.trim()) {
     search.value = value
-    void submitSearch()
+    void submitSearch(search.value)
+    return
   }
+
+  search.value = ''
+  void submitSearch(DEFAULT_SEARCH_QUERY)
 }, { immediate: true })
 
 function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -134,16 +166,15 @@ function formatDistance(meters: number): string {
     <h1>Explorar reportes</h1>
     <p class="page-intro">Encuentra mascotas reportadas y revisa coincidencias cerca de ti.</p>
 
-    <section class="explore-section" aria-labelledby="explore-title">
+    <section class="explore-section" aria-label="Explorar reportes">
       <div class="unified-section-heading">
         <div>
           <div class="eyebrow">Comunidad</div>
-          <h2 id="explore-title">Explorar reportes</h2>
           <p>Consulta las mascotas perdidas y encontradas cerca de ti.</p>
         </div>
         <span class="section-count">{{ publicTickets.length }} reportes</span>
       </div>
-      <form class="explore-toolbar" @submit.prevent="submitSearch">
+      <form class="explore-toolbar" @submit.prevent="handleSearchSubmit">
         <div class="search-box"><Icon name="search" :size="16" /><input v-model="search" type="search" placeholder="Buscar por nombre, zona o raza" aria-label="Buscar reportes públicos" /></div>
         <button class="primary-button search-submit" type="submit" :disabled="searching"><Icon name="search" :size="15" />{{ searching ? 'Buscando...' : 'Buscar' }}</button>
         <select v-model="kind" aria-label="Filtrar reportes por tipo"><option>Todos</option><option>Perdida</option><option>Encontrada</option></select>
@@ -152,7 +183,7 @@ function formatDistance(meters: number): string {
       <p v-if="searchError" class="search-error" role="alert">{{ searchError }}</p>
       <div class="explore-layout">
         <div class="public-report-grid">
-          <article v-for="ticket in publicTickets" :key="ticket.id" class="public-report-card">
+          <article v-for="ticket in paginatedPublicTickets" :key="ticket.id" class="public-report-card">
             <img :src="ticket.image" :alt="`Foto de ${ticket.name}`" />
             <div class="public-report-content">
               <span class="status" :class="{ resolved: ticket.status === 'Resuelta' }">{{ ticket.kind }} · {{ ticket.status }}</span>
@@ -163,11 +194,17 @@ function formatDistance(meters: number): string {
             </div>
           </article>
           <div v-if="!publicTickets.length" class="empty-state">No hay reportes que coincidan con estos filtros.</div>
+          <p class="search-help">¿ No ves a tu mascota ?, utiliza la barra de busqueda para más resultados</p>
+          <nav v-if="publicTickets.length && totalPages > 1" class="pagination" aria-label="Paginación de reportes">
+            <button class="secondary-button" type="button" :disabled="currentPage === 1" @click="goToPreviousPage">Anterior</button>
+            <span>Página {{ currentPage }} de {{ totalPages }}</span>
+            <button class="secondary-button" type="button" :disabled="currentPage === totalPages" @click="goToNextPage">Siguiente</button>
+          </nav>
         </div>
         <aside class="explore-map-panel">
           <div class="section-head"><h3>Ubicaciones reportadas</h3><span>{{ publicTickets.length }}</span></div>
-          <div v-if="publicTickets.length" class="public-map-list">
-            <button v-for="ticket in publicTickets" :key="`map-${ticket.id}`" class="public-map-item" @click="selectedTicket = ticket">
+          <div v-if="paginatedPublicTickets.length" class="public-map-list">
+            <button v-for="ticket in paginatedPublicTickets" :key="`map-${ticket.id}`" class="public-map-item" @click="selectedTicket = ticket">
               <img :src="ticket.image" :alt="ticket.name" /><span><strong>{{ ticket.name }}</strong><small>{{ ticket.location }}</small></span><b>{{ ticket.kind }}</b>
             </button>
           </div>
@@ -230,6 +267,10 @@ function formatDistance(meters: number): string {
 .explore-toolbar { grid-template-columns: minmax(220px, 1fr) auto 150px 150px; }
 .explore-toolbar .search-submit:disabled { opacity: .6; cursor: wait; }
 .search-error { margin: -14px 0 20px; color: #b5533e; font-size: 12px; }
+.search-help { grid-column: 1 / -1; margin: 18px 0 0; color: #758178; font-size: 13px; text-align: center; }
+.pagination { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 6px; }
+.pagination span { color: #758178; font-size: 12px; }
+.pagination .secondary-button:disabled { opacity: .5; cursor: not-allowed; }
 .explore-section, .matches-section { padding: 28px 0 34px; }
 .matches-section { border-top: 1px solid #dfe8dc; }
 .unified-section-heading { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 22px; }
