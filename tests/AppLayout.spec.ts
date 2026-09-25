@@ -24,6 +24,14 @@ describe('AppLayout', () => {
     expect(push).toHaveBeenCalledWith({ name: 'Notifications' })
   })
 
+  it('abre la confirmación del tutorial desde el botón del collar', async () => {
+    currentUser = { id: '1', name: 'Ana', email: 'a@b.com' }
+    const wrapper = mount(AppLayout)
+    await wrapper.find('button[aria-label="Volver a ver el tutorial"]').trigger('click')
+    expect(document.body.textContent).toContain('¿Quieres un recorrido rápido por la aplicación?')
+    wrapper.unmount()
+  })
+
   it('usa fallback cuando no hay foto o la imagen falla', async () => {
     currentUser = { id: '1', name: 'Ana', email: 'a@b.com' }
     const wrapper = mount(AppLayout)

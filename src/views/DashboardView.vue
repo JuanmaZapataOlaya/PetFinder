@@ -71,7 +71,7 @@ onMounted(() => {
     <button class="primary-button" @click="openCreate"><Icon name="plus" :size="17" /> Reportar mascota</button>
   </section>
 
-  <section class="stats-grid" aria-label="Resumen de actividad">
+  <section class="stats-grid" aria-label="Resumen de actividad" data-tutorial="summary">
     <article class="stat-card">
       <div class="stat-top"><span>Reportes activos</span><span class="stat-icon"><Icon name="paw" :size="15" /></span></div>
       <div class="stat-number">{{ userTickets.filter((t) => t.status === 'Activa').length }}</div>

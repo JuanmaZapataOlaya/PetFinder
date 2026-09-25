@@ -7,6 +7,7 @@ import { AUTH_STATE_CHANGED_EVENT, getCurrentUser, logout } from '@/services/aut
 
 const route = useRoute()
 const router = useRouter()
+const chatWidget = ref<InstanceType<typeof ChatWidget> | null>(null)
 const activeNav = computed(() => String(route.meta.label || 'Resumen'))
 const user = ref(getCurrentUser())
 const avatarFailed = ref(false)
@@ -80,12 +81,22 @@ onBeforeUnmount(() => {
           <button type="button" class="icon-button" aria-label="Abrir notificaciones" @click="router.push({ name: 'Notifications' })">
             <Icon name="bell" :size="19" /><i class="notification-dot" />
           </button>
+          <button
+            type="button"
+            class="icon-button tutorial-launcher"
+            aria-label="Volver a ver el tutorial"
+            title="Volver a ver el tutorial"
+            data-tutorial="repeat-tutorial"
+            @click="chatWidget?.runTutorial()"
+          >
+            <Icon name="collar" :size="20" />
+          </button>
           <img class="avatar avatar-image" :src="avatarUrl" :alt="`Foto de ${user?.name || 'Usuario'}`" @error="handleAvatarError" />
         </div>
       </header>
       <slot />
     </main>
-    <ChatWidget />
+    <ChatWidget ref="chatWidget" />
   </div>
 </template>
 

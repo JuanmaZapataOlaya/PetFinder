@@ -174,7 +174,7 @@ function formatDistance(meters: number): string {
         </div>
         <span class="section-count">{{ publicTickets.length }} reportes</span>
       </div>
-      <form class="explore-toolbar" @submit.prevent="handleSearchSubmit">
+      <form class="explore-toolbar" data-tutorial="explore-search" @submit.prevent="handleSearchSubmit">
         <div class="search-box"><Icon name="search" :size="16" /><input v-model="search" type="search" placeholder="Buscar por nombre, zona o raza" aria-label="Buscar reportes públicos" /></div>
         <button class="primary-button search-submit" type="submit" :disabled="searching"><Icon name="search" :size="15" />{{ searching ? 'Buscando...' : 'Buscar' }}</button>
         <select v-model="kind" aria-label="Filtrar reportes por tipo"><option>Todos</option><option>Perdida</option><option>Encontrada</option></select>
@@ -222,7 +222,7 @@ function formatDistance(meters: number): string {
         </div>
         <span class="section-count">{{ matchedReports.length }} resultados</span>
       </div>
-      <div class="explore-toolbar">
+      <div class="explore-toolbar" data-tutorial="match-filters">
         <select v-model="filterKind" aria-label="Filtrar coincidencias por tipo"><option value="Todos">Todos los tipos</option><option value="Perdida">Perdida</option><option value="Encontrada">Encontrada</option></select>
         <select v-model="filterType" aria-label="Filtrar coincidencias por especie"><option value="Todas">Todas las especies</option><option value="Perro">Perro</option><option value="Gato">Gato</option><option value="Ave">Ave</option><option value="Otro">Otro</option></select>
         <select v-model.number="filterRadius" aria-label="Filtrar coincidencias por distancia"><option v-for="option in RADIUS_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option></select>

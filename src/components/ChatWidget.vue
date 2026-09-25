@@ -3,6 +3,8 @@ import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { AUTH_STATE_CHANGED_EVENT, getCurrentUser } from '@/services/authService'
 import { executeAgentAction, sendAgentMessage, startAgentSession, type AgentAction } from '@/services/agentService'
+import TutorialConfirmationModal from '@/components/TutorialConfirmationModal.vue'
+import { useTutorial } from '@/composables/useTutorial'
 
 interface ChatMessage {
   id: number
@@ -11,27 +13,15 @@ interface ChatMessage {
   timestamp: Date
 }
 
-interface TutorialStep {
-  title: string
-  description: string
-}
-
 const router = useRouter()
+const { isConfirmationVisible, runTutorial, acceptTutorial, closeTutorial } = useTutorial()
 const isChatOpen = ref(false)
 const draftMessage = ref('')
 const agentSessionId = ref<string | null>(null)
 const isAgentLoading = ref(false)
 const agentError = ref('')
-const showTutorial = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
 const proactiveMessage = ref('')
-
-const tutorialSteps: TutorialStep[] = [
-  { title: 'Busca mascotas', description: 'Encuentra reportes usando la especie, raza, color y otras características.' },
-  { title: 'Crea un reporte', description: 'Publica una mascota perdida o encontrada con sus datos y ubicación.' },
-  { title: 'Revisa coincidencias', description: 'Explora reportes y posibles coincidencias para contactar a la comunidad.' },
-  { title: 'Gestiona tus reportes', description: 'Consulta, edita y revisa el estado de los reportes de tu cuenta.' },
-]
 
 const proactiveMessages = [
   'Guau, guau... ¿necesitas ayuda con algo?',
@@ -67,6 +57,11 @@ function toggleChat() {
 
 function closeChat() {
   isChatOpen.value = false
+}
+
+function startTutorial() {
+  closeChat()
+  void acceptTutorial()
 }
 
 function showNextProactiveMessage() {
@@ -119,7 +114,7 @@ function handleAgentAction(action: AgentAction | null, payload: Record<string, u
   const result = executeAgentAction({ action, payload })
   if (!result) return
   if (result.type === 'RUN_TUTORIAL') {
-    showTutorial.value = true
+    runTutorial()
     return
   }
   if (result.type === 'FIND_PET') {
@@ -154,7 +149,7 @@ async function scrollMessagesToEnd() {
 }
 
 watch(chatMessages, scrollMessagesToEnd, { deep: true })
-defineExpose({ addAssistantMessage })
+defineExpose({ addAssistantMessage, runTutorial })
 
 onMounted(() => {
   window.addEventListener(AUTH_STATE_CHANGED_EVENT, initSession)
@@ -207,26 +202,11 @@ onBeforeUnmount(() => {
       <small>Enter para enviar · Shift + Enter para una nueva línea</small>
     </form>
   </section>
-  <div v-if="showTutorial" class="modal-backdrop" @click.self="showTutorial = false">
-    <section class="modal tutorial-modal" aria-labelledby="tutorial-title">
-      <div class="modal-head">
-        <div>
-          <div class="eyebrow">Guía rápida</div>
-          <h2 id="tutorial-title">Conoce FindMyPet</h2>
-        </div>
-        <button type="button" class="close-button" aria-label="Cerrar tutorial" @click="showTutorial = false">Cerrar</button>
-      </div>
-      <div class="tutorial-steps">
-        <article v-for="(step, index) in tutorialSteps" :key="step.title" class="tutorial-step">
-          <span>{{ index + 1 }}</span>
-          <div><h3>{{ step.title }}</h3><p>{{ step.description }}</p></div>
-        </article>
-      </div>
-      <div class="modal-actions">
-        <button type="button" class="primary-button" @click="showTutorial = false">Empezar a explorar</button>
-      </div>
-    </section>
-  </div>
+  <TutorialConfirmationModal
+    :visible="isConfirmationVisible"
+    @accept="startTutorial"
+    @cancel="closeTutorial"
+  />
 </template>
 
 <style scoped>
@@ -315,13 +295,6 @@ onBeforeUnmount(() => {
 .chat-composer button { align-self: start; width: 38px; height: 38px; border: 0; border-radius: 9px; background: #173c32; color: white; font-size: 18px; }
 .chat-composer button:disabled { cursor: not-allowed; opacity: .45; }
 .chat-composer small { position: absolute; bottom: 8px; left: 15px; color: #8a968d; font-size: 9px; }
-.tutorial-modal { max-width: 520px; }
-.tutorial-steps { display: grid; gap: 12px; }
-.tutorial-step { display: flex; align-items: flex-start; gap: 12px; padding: 12px; border: 1px solid #dfe8dc; border-radius: 10px; background: #f7faf6; }
-.tutorial-step > span { display: grid; place-items: center; flex: 0 0 26px; height: 26px; border-radius: 50%; background: #d9f28f; color: #173c32; font-weight: 700; }
-.tutorial-step h3 { margin: 0 0 4px; font-size: 14px; }
-.tutorial-step p { margin: 0; color: #718475; font-size: 12px; line-height: 1.4; }
-
 @media (max-width: 650px) {
   .proactive-message { right: 86px; bottom: 25px; max-width: 190px; }
   .chat-launcher { right: 16px; bottom: 16px; width: 58px; height: 58px; }

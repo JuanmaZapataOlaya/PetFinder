@@ -30,9 +30,11 @@ onMounted(async () => {
 
 <template>
   <section class="page-view pet-history-view">
-    <div class="eyebrow">Casos finalizados</div>
-    <h1>Historial de mascotas</h1>
-    <p class="page-intro">Consulta los reportes que fueron marcados como finalizados desde tus notificaciones.</p>
+    <header class="history-heading" data-tutorial="pet-history">
+      <div class="eyebrow">Casos finalizados</div>
+      <h1>Historial de mascotas</h1>
+      <p class="page-intro">Consulta la actividad y el historial de las mascotas reclamadas por la comunidad a través de la app.</p>
+    </header>
 
     <div v-if="loading" class="history-state" aria-live="polite">
       <span class="loading-spinner" aria-hidden="true" /> Cargando historial...

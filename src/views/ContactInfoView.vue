@@ -85,7 +85,7 @@ async function saveContactInfo() {
 </script>
 
 <template>
-  <section class="page-view">
+  <section class="page-view" data-tutorial="personal-info">
     <div class="eyebrow">Mi Perfil</div>
     <h1>Información de Contacto</h1>
     <p class="page-intro">Configura la información que compartirás para contactar a otros usuarios o cuando visualicen tus reportes.</p>

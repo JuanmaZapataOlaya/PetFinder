@@ -9,6 +9,7 @@ defineProps<{ name: string; size?: number }>()
     <template v-else-if="name === 'bell'"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></template>
     <template v-else-if="name === 'plus'"><path d="M12 5v14M5 12h14"/></template>
     <template v-else-if="name === 'paw'"><path d="M8 11.5c-1.8 0-3-1.7-3-3.5s1.2-3.1 2.7-3.1S10 6.2 10 8s-.7 3.5-2 3.5ZM16 11.5c1.8 0 3-1.7 3-3.5s-1.2-3.1-2.7-3.1S14 6.2 14 8s.7 3.5 2 3.5ZM12 20c-3.2 0-5-1.7-5-3.7 0-1.8 1.3-3.3 3-3.3.9 0 1.6.4 2 .9.4-.5 1.1-.9 2-.9 1.7 0 3 1.5 3 3.3 0 2-1.8 3.7-5 3.7Z"/></template>
+    <template v-else-if="name === 'collar'"><path d="M4.5 5.5c1.8 3.2 4.3 4.8 7.5 4.8s5.7-1.6 7.5-4.8M12 10.3v3.2"/><path d="M9.5 13.5h5l1 5-3.5 2-3.5-2 1-5Z"/></template>
     <template v-else-if="name === 'heart'"><path d="M20.8 8.8c0 5.4-8.8 10-8.8 10s-8.8-4.6-8.8-10A4.6 4.6 0 0 1 12 6.3a4.6 4.6 0 0 1 8.8 2.5Z"/></template>
     <template v-else-if="name === 'message'"><path d="M20 11.5a7.5 7.5 0 0 1-8 7.5 8.5 8.5 0 0 1-3.5-.8L4 20l1.5-3.8A7.2 7.2 0 0 1 4 11.5 7.5 7.5 0 0 1 12 4a7.5 7.5 0 0 1 8 7.5Z"/></template>
     <template v-else-if="name === 'chevron'"><path d="m9 18 6-6-6-6"/></template>

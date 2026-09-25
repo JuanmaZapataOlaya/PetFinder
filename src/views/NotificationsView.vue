@@ -77,9 +77,11 @@ onMounted(async () => {
 
 <template>
   <section class="page-view notifications-view">
-    <div class="eyebrow">Actividad</div>
-    <h1>Mis notificaciones</h1>
-    <p class="page-intro">Revisa las solicitudes y mensajes relacionados con tus reportes.</p>
+    <header class="notifications-heading" data-tutorial="notifications">
+      <div class="eyebrow">Actividad</div>
+      <h1>Mis notificaciones</h1>
+      <p class="page-intro">Revisa las solicitudes y mensajes relacionados con tus reportes.</p>
+    </header>
 
     <div v-if="loading" class="notifications-state" aria-live="polite">
       <span class="loading-spinner" aria-hidden="true" /> Cargando notificaciones...
