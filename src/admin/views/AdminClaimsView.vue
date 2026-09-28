@@ -90,15 +90,15 @@ const timelineOption = computed(() => {
 })
 const ticketStatusOption = computed(() => ({
   tooltip: { trigger: 'item' }, legend: { bottom: 0 }, color: chartColor,
-  series: [{ type: 'pie', radius: ['40%', '68%'], data: (query.data.value?.ticketStatus ?? []).map((row) => ({ name: row.label, value: row.total })) }],
+  series: [{ type: 'pie', radius: ['40%', '68%'], data: (dashboard.value?.ticketStatus ?? []).map((row) => ({ name: row.label, value: row.total })) }],
 }))
 const claimStatusOption = computed(() => ({
   tooltip: { trigger: 'item' }, legend: { bottom: 0 }, color: chartColor,
-  series: [{ type: 'pie', radius: ['40%', '68%'], data: (query.data.value?.claimStatus ?? []).map((row) => ({ name: row.label, value: row.total })) }],
+  series: [{ type: 'pie', radius: ['40%', '68%'], data: (dashboard.value?.claimStatus ?? []).map((row) => ({ name: row.label, value: row.total })) }],
 }))
 const readsOption = computed(() => ({
   tooltip: { trigger: 'item' }, legend: { bottom: 0 }, color: ['#77a661', '#e57959'],
-  series: [{ type: 'pie', radius: ['40%', '68%'], data: (query.data.value?.notificationReads ?? []).map((row) => ({ name: row.label, value: row.total })) }],
+  series: [{ type: 'pie', radius: ['40%', '68%'], data: (dashboard.value?.notificationReads ?? []).map((row) => ({ name: row.label, value: row.total })) }],
 }))
 </script>
 
