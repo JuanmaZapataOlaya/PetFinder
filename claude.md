@@ -1,6 +1,7 @@
 # Directivas de Proyecto y Guías de Desarrollo
 
 ## 1. Principios de Programación y Buenas Prácticas
+* **Politica_commits:** Nunca Realices commits
 * **Código Limpio:** Escribe código claro, legible y mantenible. Prioriza la simplicidad sobre la sobreingeniería (KISS, DRY, SOLID).
 * **Calidad de Código:**
   * Usa nombres descriptivos en español

@@ -1,42 +1,19 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import VChart from 'vue-echarts'
-import '@/admin/charts/echarts'
+import { computed, onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
 import KpiCard from '@/admin/components/KpiCard.vue'
-import ChartCard from '@/admin/components/ChartCard.vue'
-import { getOverviewKpis, getTicketsTimeseries } from '@/admin/services/adminApi'
-import type { OverviewKpis, TicketsTimeseriesRow } from '@/admin/types'
+import { getOverviewKpis } from '@/admin/services/adminApi'
+import type { OverviewKpis } from '@/admin/types'
 import { useAdminQuery } from '@/admin/composables/useAdminQuery'
 
 const from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
 const to = new Date().toISOString()
 const overviewQuery = useAdminQuery<OverviewKpis | null>(() => getOverviewKpis(from, to))
-const timeseriesQuery = useAdminQuery<TicketsTimeseriesRow[]>(() => getTicketsTimeseries(from, to))
-const loading = computed(() => overviewQuery.loading.value || timeseriesQuery.loading.value)
-const error = computed(() => overviewQuery.error.value || timeseriesQuery.error.value)
+const loading = computed(() => overviewQuery.loading.value)
 const kpis = computed(() => overviewQuery.data.value)
-const timeseries = computed(() => timeseriesQuery.data.value || [])
-
-const chartOption = computed(() => {
-  const dates = [...new Set(timeseries.value.map((row) => row.bucket))]
-  return {
-    color: ['#e57959', '#77a661'],
-    tooltip: { trigger: 'axis' },
-    legend: { bottom: 0 },
-    grid: { left: 40, right: 20, top: 20, bottom: 45 },
-    xAxis: { type: 'category', data: dates },
-    yAxis: { type: 'value', minInterval: 1 },
-    series: ['Perdida', 'Encontrada'].map((kind) => ({
-      name: kind,
-      type: 'line',
-      smooth: true,
-      data: dates.map((date) => timeseries.value.find((row) => row.bucket === date && row.kind === kind)?.total || 0),
-    })),
-  }
-})
 
 async function load() {
-  await Promise.all([overviewQuery.refetch(), timeseriesQuery.refetch()])
+  await overviewQuery.refetch()
 }
 
 onMounted(load)
@@ -48,7 +25,7 @@ onMounted(load)
       <div class="head-copy">
         <div class="eyebrow">Panel de administración</div>
         <h1>Resumen</h1>
-        <p>Indicadores de los últimos 30 días y estado actual de la plataforma.</p>
+        <p>Vista general de la plataforma. Abre una sección para consultar sus métricas y registros detallados.</p>
       </div>
     </div>
     <div class="admin-kpi-grid">
@@ -59,9 +36,26 @@ onMounted(load)
       <KpiCard label="Usuarios nuevos" :value="kpis?.usuarios_nuevos || 0" help="Perfiles creados dentro del periodo seleccionado." :loading="loading" />
       <KpiCard label="Denuncias pendientes" :value="kpis?.reportes_pendientes || 0" help="Denuncias que aún no han sido revisadas." :loading="loading" />
     </div>
-    <ChartCard title="Nuevas publicaciones" description="Comparación entre mascotas perdidas y encontradas." :loading="loading" :error="error" @retry="load">
-      <VChart v-if="timeseries.length" class="admin-chart" :option="chartOption" autoresize />
-      <div v-else class="admin-chart-message">Sin datos en este periodo</div>
-    </ChartCard>
+    <div v-if="overviewQuery.error.value" class="summary-error" role="alert">
+      {{ overviewQuery.error.value }} <button type="button" @click="load">Reintentar</button>
+    </div>
+    <nav class="section-links" aria-label="Secciones administrativas">
+      <RouterLink to="/admin/reclamos"><strong>Tickets y reclamos</strong><span>Actividad, reclamos y características de mascotas</span></RouterLink>
+      <RouterLink to="/admin/reportes"><strong>Fraude y reportes</strong><span>Casos reportados por usuarios y evidencias</span></RouterLink>
+      <RouterLink to="/admin/costos"><strong>Costos de modelos</strong><span>Consumo de modelos y validaciones</span></RouterLink>
+      <RouterLink to="/admin/usuarios"><strong>Usuarios y roles</strong><span>Perfiles, contacto, roles y gestión de cuentas</span></RouterLink>
+      <RouterLink to="/admin/auditoria"><strong>Auditoría</strong><span>Registro de acciones y eventos</span></RouterLink>
+    </nav>
   </section>
 </template>
+
+<style scoped>
+.section-links { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:22px; }
+.section-links a { display:grid; gap:5px; padding:16px; border:1px solid #e5ebe3; border-radius:10px; background:#fff; color:#314238; text-decoration:none; }
+.section-links a:hover { border-color:#b7cbb1; box-shadow:0 4px 14px #3142380d; }
+.section-links strong { font-family:'Space Grotesk',sans-serif; font-size:15px; }
+.section-links span { color:#758178; font-size:12px; }
+.summary-error { margin:16px 0; color:#a34232; }
+.summary-error button { margin-left:8px; }
+@media(max-width:600px) { .section-links { grid-template-columns:1fr; } }
+</style>

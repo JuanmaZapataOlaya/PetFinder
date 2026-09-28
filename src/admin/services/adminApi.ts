@@ -18,3 +18,42 @@ export async function getTicketsTimeseries(from: string, to: string, bucket = 'd
   if (error) throw error
   return (data || []) as TicketsTimeseriesRow[]
 }
+
+export async function getClaimsDashboard(from: string, to: string) {
+  const { data, error } = await supabase.rpc('admin_claims_dashboard', { p_from: from, p_to: to })
+  if (error) throw error
+  return data || {}
+}
+
+export async function getReportsDashboard(from: string, to: string) {
+  const { data, error } = await supabase.rpc('admin_reports_dashboard', { p_from: from, p_to: to })
+  if (error) throw error
+  return data || {}
+}
+
+export async function getCostsDashboard(from: string, to: string) {
+  const { data, error } = await supabase.rpc('admin_costs_dashboard', { p_from: from, p_to: to })
+  if (error) throw error
+  return data || {}
+}
+
+export async function getUsersPage(limit = 100, offset = 0) {
+  const { data, error } = await supabase.rpc('admin_users_page', { p_limit: limit, p_offset: offset })
+  if (error) throw error
+  return data || { users: [], total: 0 }
+}
+
+export async function deleteUser(userId: string) {
+  const { error } = await supabase.rpc('admin_delete_user', { p_user_id: userId })
+  if (error) throw error
+}
+
+export async function getAuditLogs(limit = 100, offset = 0) {
+  const { data, error } = await supabase
+    .from('audit_logs')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
+  if (error) throw error
+  return data || []
+}
