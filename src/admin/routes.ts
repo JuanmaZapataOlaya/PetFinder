@@ -7,7 +7,7 @@ export const adminRoutes: RouteRecordRaw[] = [
     meta: { requiresAuth: true },
     redirect: '/admin/resumen',
     children: [
-      { path: 'resumen', name: 'admin-overview', meta: { label: 'Resumen administrativo', roles: ADMIN_PERMISSIONS.resumen }, component: () => import('@/admin/views/AdminSectionView.vue') },
+      { path: 'resumen', name: 'admin-overview', meta: { label: 'Resumen administrativo', roles: ADMIN_PERMISSIONS.resumen }, component: () => import('@/admin/views/AdminOverview.vue') },
       { path: 'reclamos', name: 'admin-claims', meta: { label: 'Reclamos', roles: ADMIN_PERMISSIONS.reclamos }, component: () => import('@/admin/views/AdminSectionView.vue') },
       { path: 'reportes', name: 'admin-reports', meta: { label: 'Fraude y reportes', roles: ADMIN_PERMISSIONS.reportes }, component: () => import('@/admin/views/AdminSectionView.vue') },
       { path: 'costos', name: 'admin-costs', meta: { label: 'Costos de modelos', roles: ADMIN_PERMISSIONS.costos }, component: () => import('@/admin/views/AdminSectionView.vue') },

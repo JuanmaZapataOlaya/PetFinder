@@ -7,6 +7,7 @@ const roles = ref<string[]>([])
 const ready = ref(false)
 let loadedUserId: string | null = null
 let loading: Promise<void> | null = null
+let authListenerReady = false
 
 async function loadRoles() {
   const user = getCurrentUser()
@@ -48,7 +49,16 @@ if (typeof window !== 'undefined') {
   window.addEventListener(AUTH_STATE_CHANGED_EVENT, invalidateRoles)
 }
 
+function ensureAuthListener() {
+  if (authListenerReady) return
+  authListenerReady = true
+  supabase.auth.onAuthStateChange(() => {
+    invalidateRoles()
+  })
+}
+
 export function useCurrentRoles() {
+  ensureAuthListener()
   if (!ready.value && !loading) void loadRoles()
 
   return {
