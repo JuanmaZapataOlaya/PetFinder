@@ -10,6 +10,7 @@ function mapNotification(row: Record<string, unknown>): AppNotification {
     evidenceImages: Array.isArray(row.evidence_images) ? row.evidence_images as NotificationEvidenceImage[] : [],
     agentReport: row.agent_report ? String(row.agent_report) : undefined,
     createdAt: new Date(String(row.created_at)).getTime(), read: Boolean(row.read), finalizado: Boolean(row.finalizado),
+    reported: Boolean(row.reported), reasonOfReport: row.reason_of_report ? String(row.reason_of_report) : undefined,
   }
 }
 
@@ -105,6 +106,25 @@ export async function getPetHistory(): Promise<PetHistoryRecord[]> {
 export async function deleteNotification(userId: string, notificationId: string): Promise<{ success: boolean; error?: string }> {
   const { error } = await supabase.from('app_notifications').delete().eq('id', notificationId).eq('recipient_user_id', userId)
   return error ? { success: false, error: error.message } : { success: true }
+}
+
+export async function reportNotification(userId: string, notificationId: string, reason: string): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('app_notifications')
+    .update({ reported: true, reason_of_report: reason })
+    .eq('id', notificationId)
+    .eq('recipient_user_id', userId)
+  return error ? { success: false, error: error.message } : { success: true }
+}
+
+export async function getReportedNotifications(): Promise<AppNotification[]> {
+  const { data, error } = await supabase
+    .from('app_notifications')
+    .select('*')
+    .eq('reported', true)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data as Record<string, unknown>[]).map(mapNotification)
 }
 
 export async function sendContactRequest(payload: Omit<AppNotification, 'id' | 'createdAt' | 'read' | 'finalizado'>): Promise<{ success: boolean; error?: string }> {

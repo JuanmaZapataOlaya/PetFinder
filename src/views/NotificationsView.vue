@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { marked } from 'marked'
-import { finalizeNotification, getNotifications, updateNotificationRead } from '@/services/notificationService'
+import { finalizeNotification, getNotifications, updateNotificationRead, reportNotification } from '@/services/notificationService'
 import { getCurrentUser } from '@/services/authService'
 import type { AppNotification } from '@/types'
 
@@ -10,6 +10,11 @@ const notifications = ref<AppNotification[]>([])
 const loading = ref(true)
 const error = ref('')
 const finalizingId = ref<string | null>(null)
+const reportingId = ref<string | null>(null)
+const reportModalOpen = ref(false)
+const reportReason = ref('')
+const reportError = ref('')
+const reportSuccess = ref(false)
 const defaultPetImage = 'https://images.unsplash.com/photo-1558788353-f76d92427f16?auto=format&fit=crop&w=320&q=80'
 
 function renderMarkdown(markdown: string): string {
@@ -59,9 +64,57 @@ async function saveInHistory(notification: AppNotification) {
   finalizingId.value = null
 }
 
-function Notification_report(notification: AppNotification) {
-  // logig here
-  console.log('Reportando notificación:', notification.id)
+function openReportModal(notification: AppNotification) {
+  reportingId.value = notification.id
+  reportReason.value = ''
+  reportError.value = ''
+  reportSuccess.value = false
+  reportModalOpen.value = true
+}
+
+function closeReportModal() {
+  reportModalOpen.value = false
+  reportingId.value = null
+  reportReason.value = ''
+  reportError.value = ''
+  reportSuccess.value = false
+}
+
+function getReasonValidationError(): string {
+  if (!reportReason.value || reportReason.value.trim() === '') {
+    return 'Por favor ingresa un motivo para reportar esta notificación.'
+  }
+  return ''
+}
+
+async function submitReport() {
+  const validationError = getReasonValidationError()
+  if (validationError) {
+    reportError.value = validationError
+    return
+  }
+
+  if (!currentUser || !reportingId.value) return
+
+  try {
+    reportError.value = ''
+    reportSuccess.value = false
+    const result = await reportNotification(currentUser.id, reportingId.value, reportReason.value.trim())
+
+    if (result.success) {
+      reportSuccess.value = true
+      const notification = notifications.value.find(n => n.id === reportingId.value)
+      if (notification) {
+        notification.reported = true
+        notification.reasonOfReport = reportReason.value.trim()
+      }
+      setTimeout(closeReportModal, 1500)
+    } else {
+      reportError.value = result.error || 'No se pudo reportar la notificación. Intenta de nuevo.'
+    }
+  } catch (err) {
+    reportError.value = 'Error al reportar la notificación. Intenta de nuevo.'
+  }
 }
 
 onMounted(async () => {
@@ -176,13 +229,62 @@ onMounted(async () => {
           <button
             type="button"
             class="danger-button notification-action"
-            @click="Notification_report(notification)"
+            :disabled="notification.reported"
+            @click="openReportModal(notification)"
           >
-            Reportar
+            {{ notification.reported ? 'Reportada' : 'Reportar' }}
           </button>
 
         </div>
       </article>
+    </div>
+
+    <div v-if="reportModalOpen" class="report-modal-overlay" role="presentation" @click.self="closeReportModal">
+      <section class="report-modal" role="dialog" aria-modal="true" aria-labelledby="report-modal-title">
+        <header class="report-modal__header">
+          <h2 id="report-modal-title">Reportar notificación</h2>
+          <button class="report-modal__close" type="button" aria-label="Cerrar" @click="closeReportModal">×</button>
+        </header>
+
+        <div class="report-modal__content">
+          <label class="report-modal__label">
+            <span>Motivo del reporte</span>
+            <textarea
+              v-model="reportReason"
+              class="report-modal__textarea"
+              placeholder="Cuéntanos por qué reportas esta notificación..."
+              rows="5"
+            />
+          </label>
+
+          <div v-if="reportError" class="report-modal__error" role="alert">
+            {{ reportError }}
+          </div>
+
+          <div v-if="reportSuccess" class="report-modal__success" role="status">
+            ✓ Notificación reportada correctamente
+          </div>
+        </div>
+
+        <div class="report-modal__actions">
+          <button
+            type="button"
+            class="secondary-button report-modal__button"
+            @click="closeReportModal"
+            :disabled="reportSuccess"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            class="primary-button report-modal__button"
+            @click="submitReport"
+            :disabled="reportSuccess"
+          >
+            Enviar
+          </button>
+        </div>
+      </section>
     </div>
   </section>
 </template>
@@ -478,6 +580,179 @@ onMounted(async () => {
   to { transform: rotate(360deg); }
 }
 
+.report-modal-overlay {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(23, 37, 29, 0.8);
+  animation: fade-in .2s ease;
+}
+
+.report-modal {
+  width: min(460px, 100%);
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.report-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px;
+  border-bottom: 1px solid #e2e9df;
+}
+
+.report-modal__header h2 {
+  margin: 0;
+  color: #253b2f;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.report-modal__close {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 7px;
+  background: #f0f3ef;
+  color: #253b2f;
+  font-size: 24px;
+  cursor: pointer;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.report-modal__close:hover {
+  background: #e2e9df;
+}
+
+.report-modal__content {
+  padding: 22px;
+  flex: 1;
+}
+
+.report-modal__label {
+  display: block;
+  margin-bottom: 16px;
+}
+
+.report-modal__label span {
+  display: block;
+  color: #40564a;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.report-modal__textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #cbd9c5;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  color: #253b2f;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.report-modal__textarea:focus {
+  outline: none;
+  border-color: #628c4f;
+  box-shadow: 0 0 0 3px rgba(98, 140, 79, 0.1);
+}
+
+.report-modal__error {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #fff7f5;
+  border-left: 3px solid #e57959;
+  color: #b5533e;
+  font-size: 12px;
+  border-radius: 4px;
+}
+
+.report-modal__success {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #f1f8ed;
+  border-left: 3px solid #6c9b57;
+  color: #4d7c42;
+  font-size: 12px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.report-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 22px;
+  border-top: 1px solid #e2e9df;
+}
+
+.report-modal__button {
+  min-width: 100px;
+  padding: 9px 16px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.report-modal__button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.primary-button {
+  border: 0;
+  border-radius: 7px;
+  padding: 10px 15px;
+  background: #628c4f;
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .2s ease;
+}
+
+.primary-button:hover:not(:disabled) {
+  background: #507e55;
+}
+
+.secondary-button {
+  border: 1px solid #cbd9c5;
+  border-radius: 7px;
+  padding: 9px 14px;
+  background: white;
+  color: #40564a;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color .2s ease, background .2s ease;
+}
+
+.secondary-button:hover:not(:disabled) {
+  border-color: #628c4f;
+  background: #f1f8ed;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 @media (max-width: 650px) {
   .notification-card {
     padding: 17px;
@@ -508,6 +783,14 @@ onMounted(async () => {
   }
 
   .notification-confirmation__actions button {
+    width: 100%;
+  }
+
+  .report-modal__actions {
+    flex-direction: column-reverse;
+  }
+
+  .report-modal__button {
     width: 100%;
   }
 }
