@@ -20,5 +20,6 @@ defineProps<{ name: string; size?: number }>()
     <template v-else-if="name === 'chart'"><path d="M4 19V5M4 19h16M8 16v-4M12 16V8M16 16v-7"/></template>
     <template v-else-if="name === 'users'"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></template>
     <template v-else-if="name === 'clipboard'"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2M9 9h6M9 13h6M9 17h3"/></template>
+    <template v-else-if="name === 'mic'"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"/></template>
   </svg>
 </template>

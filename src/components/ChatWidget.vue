@@ -2,7 +2,8 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { AUTH_STATE_CHANGED_EVENT, getCurrentUser } from '@/services/authService'
-import { executeAgentAction, sendAgentMessage, startAgentSession, type AgentAction } from '@/services/agentService'
+import { createRealtimeSession, executeAgentAction, sendAgentMessage, startAgentSession, type AgentAction } from '@/services/agentService'
+import Icon from '@/components/Icon.vue'
 import TutorialConfirmationModal from '@/components/TutorialConfirmationModal.vue'
 import { useTutorial } from '@/composables/useTutorial'
 
@@ -20,8 +21,11 @@ const draftMessage = ref('')
 const agentSessionId = ref<string | null>(null)
 const isAgentLoading = ref(false)
 const agentError = ref('')
+const isRealtimeActive = ref(false)
+const isRealtimeStarting = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
 const proactiveMessage = ref('')
+const remoteAudio = ref<HTMLAudioElement | null>(null)
 
 const proactiveMessages = [
   'Guau, guau... ¿necesitas ayuda con algo?',
@@ -39,6 +43,9 @@ let nextMessageId = 3
 let proactiveMessageIndex = 0
 let proactiveMessageTimer: ReturnType<typeof setInterval> | undefined
 let proactiveMessageHideTimer: ReturnType<typeof setTimeout> | undefined
+let realtimePeerConnection: RTCPeerConnection | null = null
+let realtimeDataChannel: RTCDataChannel | null = null
+let microphoneStream: MediaStream | null = null
 
 async function initSession() {
   const user = getCurrentUser()
@@ -56,7 +63,106 @@ function toggleChat() {
 }
 
 function closeChat() {
+  if (isRealtimeActive.value || isRealtimeStarting.value) return
   isChatOpen.value = false
+}
+
+function sendRealtimeEvent(event: Record<string, unknown>) {
+  if (realtimeDataChannel?.readyState === 'open') realtimeDataChannel.send(JSON.stringify(event))
+}
+
+function addRealtimeTranscript(role: 'user' | 'assistant', content: unknown) {
+  if (typeof content !== 'string' || !content.trim()) return
+  chatMessages.value.push({ id: nextMessageId++, role, content: content.trim(), timestamp: new Date() })
+}
+
+function handleRealtimeEvent(event: MessageEvent<string>) {
+  try {
+    const payload = JSON.parse(event.data) as { type?: string; transcript?: string }
+    if (payload.type === 'conversation.item.input_audio_transcription.completed') {
+      addRealtimeTranscript('user', payload.transcript)
+    }
+    if (payload.type === 'response.audio_transcript.done' || payload.type === 'response.output_audio_transcript.done') {
+      addRealtimeTranscript('assistant', payload.transcript)
+    }
+  } catch {
+    agentError.value = 'Se recibió un evento de voz inválido.'
+  }
+}
+
+async function endRealtimeSession() {
+  microphoneStream?.getTracks().forEach((track) => track.stop())
+  microphoneStream = null
+  realtimeDataChannel?.close()
+  realtimeDataChannel = null
+  realtimePeerConnection?.close()
+  realtimePeerConnection = null
+  if (remoteAudio.value) remoteAudio.value.srcObject = null
+  isRealtimeActive.value = false
+  isRealtimeStarting.value = false
+}
+
+async function startRealtimeSession() {
+  if (isRealtimeActive.value || isRealtimeStarting.value) return
+  isRealtimeStarting.value = true
+  agentError.value = ''
+  try {
+    if (!agentSessionId.value) {
+      const user = getCurrentUser()
+      if (user) agentSessionId.value = await startAgentSession(user.id)
+    }
+    if (!agentSessionId.value) throw new Error('No hay una sesión activa del asistente.')
+
+    const session = await createRealtimeSession(agentSessionId.value)
+    microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    realtimePeerConnection = new RTCPeerConnection()
+    realtimeDataChannel = realtimePeerConnection.createDataChannel('oai-events')
+    realtimeDataChannel.addEventListener('message', handleRealtimeEvent)
+    realtimeDataChannel.addEventListener('open', () => {
+      sendRealtimeEvent({
+        type: 'session.update',
+        session: {
+          audio: {
+            input: { format: { type: 'audio/pcm', rate: 24000 } },
+            output: { format: { type: 'audio/pcm', rate: 24000 } },
+          },
+          tools: session.tools,
+        },
+      })
+    })
+    realtimePeerConnection.addEventListener('track', (event) => {
+      if (remoteAudio.value && event.streams[0]) {
+        remoteAudio.value.srcObject = event.streams[0]
+        void remoteAudio.value.play()
+      }
+    })
+    realtimePeerConnection.addEventListener('connectionstatechange', () => {
+      if (realtimePeerConnection?.connectionState === 'failed') {
+        agentError.value = 'La conexión de voz se interrumpió.'
+        void endRealtimeSession()
+      }
+    })
+    microphoneStream.getTracks().forEach((track) => realtimePeerConnection?.addTrack(track, microphoneStream as MediaStream))
+
+    const offer = await realtimePeerConnection.createOffer()
+    await realtimePeerConnection.setLocalDescription(offer)
+    const response = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(session.model)}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.client_secret.value}`,
+        'Content-Type': 'application/sdp',
+      },
+      body: offer.sdp,
+    })
+    if (!response.ok) throw new Error('No fue posible conectar la sesión de voz.')
+    await realtimePeerConnection.setRemoteDescription({ type: 'answer', sdp: await response.text() })
+    isRealtimeActive.value = true
+  } catch (error) {
+    await endRealtimeSession()
+    agentError.value = error instanceof Error ? error.message : 'No fue posible iniciar la sesión de voz.'
+  } finally {
+    isRealtimeStarting.value = false
+  }
 }
 
 function startTutorial() {
@@ -86,6 +192,7 @@ function handleMessageKeydown(event: KeyboardEvent) {
 }
 
 async function sendMessage() {
+  if (isRealtimeActive.value || isRealtimeStarting.value) return
   const content = draftMessage.value.trim()
   if (!content || isAgentLoading.value) return
 
@@ -164,6 +271,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('storage', initSession)
   if (proactiveMessageTimer) clearInterval(proactiveMessageTimer)
   if (proactiveMessageHideTimer) clearTimeout(proactiveMessageHideTimer)
+  void endRealtimeSession()
 })
 </script>
 
@@ -182,7 +290,7 @@ onBeforeUnmount(() => {
         <img src="/media/LogoAgente.png" alt="" />
         <div><strong>Asistente Virtual</strong><span><i /> En línea</span></div>
       </div>
-      <button type="button" class="chat-close" aria-label="Cerrar asistente virtual" @click="closeChat">×</button>
+      <button v-if="!isRealtimeActive && !isRealtimeStarting" type="button" class="chat-close" aria-label="Cerrar asistente virtual" @click="closeChat">×</button>
     </header>
     <div ref="messagesContainer" class="chat-messages" role="log" aria-live="polite">
       <div v-for="message in chatMessages" :key="message.id" class="chat-message" :class="`chat-message--${message.role}`">
@@ -196,11 +304,18 @@ onBeforeUnmount(() => {
       <p v-if="isAgentLoading" class="chat-status" role="status">El asistente está escribiendo...</p>
       <p v-else-if="agentError" class="chat-status chat-status--error" role="alert">{{ agentError }}</p>
     </div>
-    <form class="chat-composer" @submit.prevent="sendMessage">
+    <div v-if="isRealtimeActive || isRealtimeStarting" class="realtime-panel">
+      <span class="realtime-indicator" :class="{ 'realtime-indicator--starting': isRealtimeStarting }" />
+      <p>{{ isRealtimeStarting ? 'Conectando al asistente...' : 'Sesión de voz activa' }}</p>
+      <button type="button" :disabled="isRealtimeStarting" @click="endRealtimeSession">Finalizar sesión</button>
+    </div>
+    <form v-else class="chat-composer" @submit.prevent="sendMessage">
       <textarea v-model="draftMessage" rows="1" aria-label="Escribe tu mensaje" placeholder="Escribe tu mensaje..." @keydown="handleMessageKeydown" />
       <button type="submit" aria-label="Enviar mensaje" :disabled="!draftMessage.trim()">➤</button>
+      <button type="button" class="voice-button" aria-label="Activar asistente por voz" title="Activar asistente por voz" @click="startRealtimeSession"><Icon name="mic" :size="17" /></button>
       <small>Enter para enviar · Shift + Enter para una nueva línea</small>
     </form>
+    <audio ref="remoteAudio" autoplay />
   </section>
   <TutorialConfirmationModal
     :visible="isConfirmationVisible"
@@ -294,7 +409,14 @@ onBeforeUnmount(() => {
 .chat-composer textarea:focus { border-color: #8eb66d; }
 .chat-composer button { align-self: start; width: 38px; height: 38px; border: 0; border-radius: 9px; background: #173c32; color: white; font-size: 18px; }
 .chat-composer button:disabled { cursor: not-allowed; opacity: .45; }
+.voice-button { grid-column: 2; grid-row: 2; display: grid; place-items: center; border: 1px solid #bfd0bb !important; background: #f0f6ed !important; color: #173c32 !important; }
 .chat-composer small { position: absolute; bottom: 8px; left: 15px; color: #8a968d; font-size: 9px; }
+.realtime-panel { display: flex; align-items: center; gap: 10px; padding: 15px; border-top: 1px solid #dfe8dc; background: white; }
+.realtime-panel p { flex: 1; margin: 0; color: #34493b; font-size: 12px; }
+.realtime-panel button { border: 0; border-radius: 8px; padding: 9px 12px; background: #b5533e; color: white; font-size: 11px; }
+.realtime-panel button:disabled { cursor: wait; opacity: .55; }
+.realtime-indicator { width: 10px; height: 10px; flex: 0 0 auto; border-radius: 50%; background: #78ad58; box-shadow: 0 0 0 4px #dcebd7; }
+.realtime-indicator--starting { background: #d09a48; box-shadow: 0 0 0 4px #f3e5c9; }
 @media (max-width: 650px) {
   .proactive-message { right: 86px; bottom: 25px; max-width: 190px; }
   .chat-launcher { right: 16px; bottom: 16px; width: 58px; height: 58px; }
