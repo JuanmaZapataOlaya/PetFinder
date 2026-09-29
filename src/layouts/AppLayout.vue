@@ -31,7 +31,6 @@ const adminNavigation = computed(() => [
   { label: 'Resumen', path: '/admin/resumen', icon: 'grid', allowed: canAccessAdminSection(roles.value, 'resumen') },
   { label: 'Reclamos', path: '/admin/reclamos', icon: 'paw', allowed: canAccessAdminSection(roles.value, 'reclamos') },
   { label: 'Fraude y reportes', path: '/admin/reportes', icon: 'flag', allowed: canAccessAdminSection(roles.value, 'reportes') },
-  { label: 'Notificaciones reportadas', path: '/admin/notificaciones-reportadas', icon: 'alert', allowed: canAccessAdminSection(roles.value, 'reportes') },
   { label: 'Costos de modelos', path: '/admin/costos', icon: 'chart', allowed: canAccessAdminSection(roles.value, 'costos') },
   { label: 'Usuarios y roles', path: '/admin/usuarios', icon: 'users', allowed: canAccessAdminSection(roles.value, 'usuarios') },
   { label: 'Auditoría', path: '/admin/auditoria', icon: 'clipboard', allowed: canAccessAdminSection(roles.value, 'auditoria') },

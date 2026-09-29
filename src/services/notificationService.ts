@@ -26,8 +26,32 @@ export async function updateNotificationRead(userId: string, notificationId: str
 }
 
 export async function finalizeNotification(userId: string, notificationId: string): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase.from('app_notifications').update({ finalizado: true }).eq('id', notificationId).eq('recipient_user_id', userId)
-  return error ? { success: false, error: error.message } : { success: true }
+  const { data: notification, error: fetchError } = await supabase
+    .from('app_notifications')
+    .select('report_id')
+    .eq('id', notificationId)
+    .eq('recipient_user_id', userId)
+    .single()
+
+  if (fetchError) return { success: false, error: fetchError.message }
+  if (!notification) return { success: false, error: 'Notificación no encontrada' }
+
+  const { error: notifError } = await supabase
+    .from('app_notifications')
+    .update({ finalizado: true })
+    .eq('id', notificationId)
+    .eq('recipient_user_id', userId)
+
+  if (notifError) return { success: false, error: notifError.message }
+
+  const { error: ticketError } = await supabase
+    .from('pet_tickets')
+    .update({ status: 'Resuelta' })
+    .eq('id', notification.report_id)
+
+  if (ticketError) return { success: false, error: ticketError.message }
+
+  return { success: true }
 }
 
 type HistoryNotificationRow = {
