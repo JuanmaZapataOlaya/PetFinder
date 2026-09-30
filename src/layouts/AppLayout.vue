@@ -4,6 +4,8 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import ChatWidget from '@/components/ChatWidget.vue'
 import { AUTH_STATE_CHANGED_EVENT, getCurrentUser, logout } from '@/services/authService'
+import { useCurrentRoles } from '@/admin/composables/useCurrentRoles'
+import { ADMIN_PERMISSIONS, canAccessAdminSection } from '@/admin/permissions'
 
 const route = useRoute()
 const router = useRouter()
@@ -14,6 +16,7 @@ const avatarFailed = ref(false)
 const menuOpen = ref(false)
 const fallbackAvatar = '/avatar-default.svg'
 const avatarUrl = computed(() => avatarFailed.value || !user.value?.photoUrl ? fallbackAvatar : user.value.photoUrl)
+const { roles, isStaff } = useCurrentRoles()
 
 const navigation = [
   { label: 'Resumen', path: '/resumen', icon: 'grid' },
@@ -23,6 +26,15 @@ const navigation = [
   { label: 'Historial de mascotas', path: '/historial-mascotas', icon: 'paw' },
   { label: 'Información personal', path: '/contact-info', icon: 'message' },
 ]
+
+const adminNavigation = computed(() => [
+  { label: 'Resumen', path: '/admin/resumen', icon: 'grid', allowed: canAccessAdminSection(roles.value, 'resumen') },
+  { label: 'Reclamos', path: '/admin/reclamos', icon: 'paw', allowed: canAccessAdminSection(roles.value, 'reclamos') },
+  { label: 'Fraude y reportes', path: '/admin/reportes', icon: 'flag', allowed: canAccessAdminSection(roles.value, 'reportes') },
+  { label: 'Costos de modelos', path: '/admin/costos', icon: 'chart', allowed: canAccessAdminSection(roles.value, 'costos') },
+  { label: 'Usuarios y roles', path: '/admin/usuarios', icon: 'users', allowed: canAccessAdminSection(roles.value, 'usuarios') },
+  { label: 'Auditoría', path: '/admin/auditoria', icon: 'clipboard', allowed: canAccessAdminSection(roles.value, 'auditoria') },
+].filter((item) => item.allowed))
 
 watch(route, () => { menuOpen.value = false })
 
@@ -62,6 +74,12 @@ onBeforeUnmount(() => {
       <nav class="nav-list" aria-label="Navegación principal">
         <RouterLink v-for="item in navigation" :key="item.path" :to="item.path" class="nav-item"><Icon :name="item.icon" :size="17" /><span>{{ item.label }}</span></RouterLink>
       </nav>
+      <template v-if="isStaff">
+        <div class="nav-label admin-nav-label">Administración</div>
+        <nav class="nav-list" aria-label="Navegación administrativa">
+          <RouterLink v-for="item in adminNavigation" :key="item.path" :to="item.path" class="nav-item"><Icon :name="item.icon" :size="17" /><span>{{ item.label }}</span></RouterLink>
+        </nav>
+      </template>
       <div class="sidebar-spacer" />
       <div class="user-mini">
         <img class="avatar avatar-image" :src="avatarUrl" :alt="`Foto de ${user?.name || 'Usuario'}`" @error="handleAvatarError" />

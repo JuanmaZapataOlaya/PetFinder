@@ -40,3 +40,5 @@ __screenshots__/
 
 .env.local
 .env
+.claude/
+skills-lock.json

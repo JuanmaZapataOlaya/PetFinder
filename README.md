@@ -71,3 +71,35 @@ npm run build
 ```
 
 # PetFinder
+
+## Ejecución con Docker
+
+La aplicación se puede ejecutar en Rancher Desktop con Docker Compose. La imagen
+del frontend usa `node:22-alpine` para compilar y `nginx:1.27-alpine` para servir
+la SPA. El fallback usa `python:3.12-slim` y conserva el índice en un volumen
+Docker.
+
+1. Completa el `.env` de la raíz con las variables `VITE_*`. Para usar el
+  fallback local desde el navegador, establece `VITE_TURBOVEC_URL=http://localhost:8001`.
+2. Completa `turbovec-fallback/.env` con `PORTKEY_API_KEY`, `PORTKEY_BASE_URL`,
+  `TURBOVEC_SYNC_TOKEN` y el resto de valores del servicio.
+3. Asegúrate de incluir `http://localhost:8080` en
+  `TURBOVEC_ALLOWED_ORIGINS` del fallback.
+4. Levanta los servicios:
+
+```sh
+docker compose up --build -d
+```
+
+Abre `http://localhost:8080`. El fallback queda disponible en
+`http://localhost:8001/health`. Para detener los contenedores sin borrar el
+índice persistido:
+
+```sh
+docker compose down
+```
+
+Los puertos se pueden cambiar con `FRONTEND_PORT` y `TURBOVEC_PORT` en el `.env`
+de la raíz. No se copian archivos `.env` dentro de las imágenes; Compose usa el
+`.env` raíz para los argumentos de compilación de Vite y
+`turbovec-fallback/.env` para el entorno del servicio Python.

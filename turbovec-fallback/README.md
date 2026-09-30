@@ -64,8 +64,10 @@ El ejemplo abreviado no es valido: cada vector debe contener exactamente 1536 va
 `POST http://127.0.0.1:8001/search`
 
 ```json
-{"query": "perro blanco perdido", "limit": 10}
+{"query": "perro blanco perdido", "limit": 10, "type": "Perro", "kind": "Perdida"}
 ```
+
+`type` y `kind` son opcionales y se aplican sobre la metadata sincronizada de cada ticket. Puedes enviar uno, ambos o ninguno. Los valores validos son `Perro`, `Gato`, `Ave`, `Otro` para `type`, y `Perdida`, `Encontrada` para `kind`.
 
 La respuesta contiene los reportes sincronizados, IDs estables y el score de similitud de TurboVec. Los reportes existentes deben reindexarse para incluir metadata local.
 

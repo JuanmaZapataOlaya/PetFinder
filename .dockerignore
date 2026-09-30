@@ -1,0 +1,14 @@
+.git
+.github
+.vscode
+.claude
+.env
+.env.*
+!.env.example
+node_modules
+dist
+coverage
+turbovec-fallback/.venv
+turbovec-fallback/__pycache__
+turbovec-fallback/data
+*.log

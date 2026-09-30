@@ -1,11 +1,16 @@
 // ABOUTME: Executes pet search queries against the vector search backend
 // ABOUTME: Validates input through guardrails before invoking the embedding model
 
-import type { PetTicket } from '@/types'
+import type { PetTicket, PetType, TicketKind } from '@/types'
 import { supabase } from '@/services/supabase'
 import { validateSearchInput } from '@/services/searchGuardrailService'
 
 const turbovecUrl = import.meta.env.VITE_TURBOVEC_URL as string | undefined
+
+export type PetSearchFilters = {
+  type?: PetType
+  kind?: TicketKind
+}
 
 type SearchTicketRow = {
   id: number
@@ -47,12 +52,19 @@ function mapSearchTicket(row: SearchTicketRow): PetTicket {
   }
 }
 
-export async function searchPets(query: string): Promise<PetTicket[]> {
+export async function searchPets(query: string, filters: PetSearchFilters = {}): Promise<PetTicket[]> {
   const validation = validateSearchInput(query)
   if (!validation.valid) throw new Error(validation.error)
 
+  const searchBody = {
+    query,
+    limit: 50,
+    type: filters.type ?? null,
+    kind: filters.kind ?? null,
+  }
+
   const { data, error } = await supabase.functions.invoke<{ results: SearchTicketRow[] }>('search-pets', {
-    body: { query, limit: 50 },
+    body: searchBody,
   })
   if (!error) return (data?.results || []).map(mapSearchTicket)
 
@@ -60,7 +72,7 @@ export async function searchPets(query: string): Promise<PetTicket[]> {
   const fallbackResponse = await fetch(`${turbovecUrl.replace(/\/+$/, '')}/search`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, limit: 50 }),
+    body: JSON.stringify(searchBody),
   })
   if (!fallbackResponse.ok) throw error
 
@@ -69,4 +81,8 @@ export async function searchPets(query: string): Promise<PetTicket[]> {
     .map((result) => result.record)
     .filter((row): row is SearchTicketRow => Boolean(row))
     .map(mapSearchTicket)
+    .filter((ticket) =>
+      (!filters.type || ticket.type === filters.type) &&
+      (!filters.kind || ticket.kind === filters.kind)
+    )
 }
