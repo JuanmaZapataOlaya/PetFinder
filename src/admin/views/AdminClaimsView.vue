@@ -3,8 +3,8 @@ import { computed, ref, onMounted } from 'vue'
 import VChart from 'vue-echarts'
 import '@/admin/charts/echarts'
 import type { AppNotification } from '@/types'
-import { getReportedNotifications } from '@/services/notificationService'
-import { getClaimsDashboard, getAllClaims } from '@/admin/services/adminApi'
+import { getFullNotifications } from '@/services/notificationService'
+import { getClaimsDashboard } from '@/admin/services/adminApi'
 import { useAdminQuery } from '@/admin/composables/useAdminQuery'
 
 interface GroupRow { label: string; total: number; kind?: string; read?: boolean; finalizado?: boolean }
@@ -58,49 +58,39 @@ const error = computed(() => query.error.value)
 
 const notifications = ref<AppNotification[]>([])
 const selectedNotification = ref<AppNotification | null>(null)
-
-const allClaims = ref<any[]>([])
 const claimsLoading = ref(false)
 const claimsError = ref('')
-const selectedClaim = ref<any | null>(null)
 
 async function reload() {
   await query.refetch()
-  await loadAllClaims()
+  await loadReportedNotifications()
 }
 
-async function loadAllClaims() {
+function truncateText(text: string, maxLength: number = 80): string {
+  if (text.length <= maxLength) return text
+  return text.substring(0, maxLength) + '...'
+}
+
+async function loadReportedNotifications() {
   try {
     claimsLoading.value = true
     claimsError.value = ''
-    allClaims.value = await getAllClaims()
+    notifications.value = await getFullNotifications()
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    claimsError.value = `No se pudieron cargar los reclamos: ${message}`
+    claimsError.value = `No se pudieron cargar las notificaciones reportadas: ${message}`
+    console.error('Error completo:', err)
   } finally {
     claimsLoading.value = false
   }
 }
 
-async function loadReportedNotifications() {
-  try {
-    loading.value = true
-    error.value = ''
-    notifications.value = await getReportedNotifications()
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    error.value = `No se pudieron cargar las notificaciones reportadas: ${message}`
-    console.error('Error completo:', err)
-  } finally {
-    loading.value = false
-  }
-}
-
-function formatDate(dateString: string): string {
+function formatDate(timestamp: number | string): string {
+  const date = typeof timestamp === 'number' ? new Date(timestamp) : new Date(timestamp)
   return new Intl.DateTimeFormat('es-CO', {
     dateStyle: 'medium',
     timeStyle: 'short',
-  }).format(new Date(dateString))
+  }).format(date)
 }
 
 onMounted(reload)
@@ -232,50 +222,124 @@ const readsOption = computed(() => ({
         <article class="admin-chart-card"><header><div><h2>Reportes por raza</h2><p>Principales razas del periodo</p></div></header><VChart v-if="dashboard.breedStats.length" class="admin-chart" :option="breakdownOption('Tickets', dashboard.breedStats)" autoresize /><div v-else class="admin-chart-message">Sin datos de razas.</div></article>
         <article class="admin-chart-card"><header><div><h2>Estado de notificaciones</h2><p>Estado de lectura y finalización</p></div></header><VChart v-if="dashboard.notificationReads.length" class="admin-chart" :option="readsOption" autoresize /><div v-else class="admin-chart-message">Sin notificaciones en este periodo.</div></article>
       </div>
-      <article class="admin-chart-card claims-list"><header><div><h2>Lista de reclamos recibidos</h2><p>Todos los reclamos de la plataforma</p></div></header>
-        <div v-if="claimsLoading" class="section-state">Cargando reclamos…</div>
-        <div v-else-if="claimsError" class="section-state error-state" role="alert">{{ claimsError }} <button @click="loadAllClaims">Reintentar</button></div>
-        <div v-else-if="!allClaims.length" class="admin-chart-message">No hay reclamos registrados.</div>
+      <article class="admin-chart-card claims-list"><header><div><h2>Lista de reclamos recibidos</h2><p>Todas las notificaciones reportadas de la plataforma</p></div></header>
+        <div v-if="claimsLoading" class="section-state">Cargando notificaciones…</div>
+        <div v-else-if="claimsError" class="section-state error-state" role="alert">{{ claimsError }} <button @click="loadReportedNotifications">Reintentar</button></div>
+        <div v-else-if="!notifications.length" class="admin-chart-message">No hay notificaciones reportadas.</div>
         <div v-else class="table-scroll">
           <table class="claims-table">
             <thead>
-              <tr><th>ID</th><th>Fecha</th><th>Estado</th><th>Ticket</th><th>Similitud</th><th>Evidencia</th><th></th></tr>
+              <tr>
+                <th>ID</th>
+                <th>Título</th>
+                <th>Remitente</th>
+                <th>Contenido</th>
+                <th>Fecha</th>
+                <th>Estado</th>
+                <th></th>
+              </tr>
             </thead>
             <tbody>
-              <tr v-for="claim in allClaims" :key="claim.id" class="claim-row">
-                <td class="col-id">{{ claim.report_id }}</td>
-                <td class="col-date">{{ formatDate(claim.created_at) }}</td>
-                <td class="col-status"><span class="status-badge">{{ claim.finalizado }}</span></td>
-                <td class="col-ticket">
-                  <div v-if="claim.pet_tickets">{{ claim.pet_tickets.name }} · {{ claim.pet_tickets.kind }}<small>{{ claim.pet_tickets.location }}</small></div>
-                  <div v-else>—</div>
+              <tr v-for="notification in notifications" :key="notification.id" class="claim-row">
+                <td class="col-id">{{ notification.id}}</td>
+                <td class="col-sender">Reporte #{{ notification.reportId }}</td>
+                <td class="col-sender">{{ notification.senderName || 'No indicado' }}</td>
+                <td class="col-reason">
+                  <span :title="notification.message || 'Sin motivo'">
+                    {{ truncateText(notification.message || 'Sin especificar', 60) }}
+                  </span>
                 </td>
-                <td class="col-score">{{ claim.similarity_score === null ? '—' : `${Math.round(claim.similarity_score * 100)}%` }}</td>
-                <td class="col-evidence"><a v-if="claim.evidence_image" :href="claim.evidence_image" target="_blank" rel="noopener">Ver imagen</a><span v-else>—</span></td>
-                <td class="col-action"><button class="view-button" type="button" @click="selectedClaim = claim">Ver detalles</button></td>
+                <td class="col-date">{{ formatDate(notification.createdAt) }}</td>
+                <td class="col-status">
+                  <span class="status-badge">{{ notification.finalizado ? 'Finalizado' : 'En proceso' }}</span>
+                </td>
+                <td class="col-action">
+                  <button class="view-button" type="button" @click="selectedNotification = notification">
+                    Ver detalles
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>
         </div>
       </article>
 
-      <div v-if="selectedClaim" class="detail-overlay" role="presentation" @click.self="selectedClaim = null">
-        <section class="detail-dialog" role="dialog" aria-modal="true" :aria-label="`Reclamo #${selectedClaim.id}`">
+      <div v-if="selectedNotification" class="detail-overlay" role="presentation" @click.self="selectedNotification = null">
+        <section class="detail-dialog" role="dialog" aria-modal="true" :aria-label="`Notificación reportada ${selectedNotification.id}`">
           <header>
             <div>
-              <div class="eyebrow">Reclamo #{{ selectedClaim.report_id }}</div>
-              <h2>Detalles del reclamo</h2>
+              <div class="eyebrow">Notificación #{{ selectedNotification.id }}</div>
+              <h2>{{ selectedNotification.title }}</h2>
             </div>
-            <button class="close-button" type="button" aria-label="Cerrar" @click="selectedClaim = null">×</button>
+            <button class="close-button" type="button" aria-label="Cerrar" @click="selectedNotification = null">×</button>
           </header>
+
           <dl class="detail-list">
-            <div><dt>ID</dt><dd>{{ selectedClaim.report_id }}</dd></div>
-            <div><dt>Estado</dt><dd>{{ selectedClaim.finalizado }}</dd></div>
-            <div><dt>Fecha</dt><dd>{{ formatDate(selectedClaim.created_at) }}</dd></div>
-            <div><dt>Similitud</dt><dd>{{ selectedClaim.similarity_score === null ? '—' : `${Math.round(selectedClaim.similarity_score * 100)}%` }}</dd></div>
-            <div v-if="selectedClaim.pet_tickets" class="detail-full"><dt>Ticket</dt><dd>{{ selectedClaim.pet_tickets.name }} ({{ selectedClaim.pet_tickets.kind }}) - {{ selectedClaim.pet_tickets.location }}</dd></div>
-            <div v-if="selectedClaim.evidence_images" class="detail-full"><dt>Evidencia</dt><dd><a :href="selectedClaim.evidence_images" target="_blank" rel="noopener">Ver imagen</a></dd></div>
+            <div>
+              <dt>ID de notificación</dt>
+              <dd>{{ selectedNotification.id }}</dd>
+            </div>
+            <div>
+              <dt>Tipo</dt>
+              <dd>{{ selectedNotification.type }}</dd>
+            </div>
+            <div>
+              <dt>Remitente</dt>
+              <dd>{{ selectedNotification.senderName || 'No indicado' }}</dd>
+            </div>
+            <div>
+              <dt>Receptor</dt>
+              <dd>{{ selectedNotification.recipientUserId }}</dd>
+            </div>
+            <div>
+              <dt>Reporte asociado</dt>
+              <dd>#{{ selectedNotification.reportId }}</dd>
+            </div>
+            <div>
+              <dt>Fecha de creación</dt>
+              <dd>{{ formatDate(selectedNotification.createdAt) }}</dd>
+            </div>
+            <div>
+              <dt>Estado de lectura</dt>
+              <dd>{{ selectedNotification.read ? 'Leída' : 'No leída' }}</dd>
+            </div>
+            <div class="detail-full">
+              <dt>Contenido</dt>
+              <dd>{{ selectedNotification.message || selectedNotification.title }}</dd>
+            </div>
+            <div v-if="selectedNotification.senderPhone">
+              <dt>Teléfono del remitente</dt>
+              <dd>{{ selectedNotification.senderPhone }}</dd>
+            </div>
+            <div v-if="selectedNotification.senderEmail">
+              <dt>Email del remitente</dt>
+              <dd>{{ selectedNotification.senderEmail }}</dd>
+            </div>
           </dl>
+
+          <div v-if="selectedNotification.petImage" class="image-section">
+            <h3>Imagen de mascota</h3>
+            <a :href="selectedNotification.petImage" target="_blank" rel="noopener noreferrer">
+              <img :src="selectedNotification.petImage" alt="Imagen de mascota" />
+            </a>
+          </div>
+
+          <div v-if="selectedNotification.evidenceImages?.length" class="image-section">
+            <h3>Evidencias adjuntas ({{ selectedNotification.evidenceImages.length }})</h3>
+            <div class="evidence-grid">
+              <a
+                v-for="(image, index) in selectedNotification.evidenceImages"
+                :key="`${selectedNotification.id}-${index}`"
+                :href="image.url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="evidence-item"
+              >
+                <img :src="image.url" :alt="`Evidencia ${index + 1}`" />
+                <span>Ver evidencia {{ index + 1 }}</span>
+              </a>
+            </div>
+          </div>
         </section>
       </div>
     </template>
@@ -332,4 +396,71 @@ a { color:#507e55; }
 .section-state button { margin-top:10px; padding:8px 16px; border:1px solid #dce5da; border-radius:7px; background:white; color:#507e55; cursor:pointer; font-size:12px; font-weight:600; }
 @media(max-width:800px) { .claims-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:620px) { .section-heading { align-items:stretch; flex-direction:column; } .section-chart-grid { grid-template-columns:minmax(0,1fr); } .chart-wide { grid-column:auto; } .section-chart-grid .admin-chart { height:260px; } .detail-list { grid-template-columns:1fr; } }
+.reason-text {
+  background: #f7faf5;
+  padding: 10px;
+  border-left: 3px solid #e57959;
+  border-radius: 4px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.image-section {
+  margin-top: 20px;
+}
+.image-section h3 {
+  margin: 0 0 10px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+.image-section > a {
+  display: block;
+  max-width: 240px;
+}
+.image-section img {
+  width: 100%;
+  max-height: 210px;
+  border-radius: 7px;
+  background: #f2f4f1;
+  object-fit: cover;
+}
+.evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+  gap: 10px;
+}
+.evidence-item {
+  display: grid;
+  gap: 6px;
+  color: #507e55;
+  font-size: 12px;
+  text-decoration: none;
+}
+.evidence-item img {
+  width: 100%;
+  max-height: 210px;
+  border-radius: 7px;
+  background: #f2f4f1;
+  object-fit: cover;
+}
+.title-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+.title-content small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.col-title {
+  max-width: 200px;
+}
+.col-reason {
+  max-width: 200px;
+}
+.col-reason span {
+  display: block;
+  overflow-wrap: anywhere;
+}
 </style>  

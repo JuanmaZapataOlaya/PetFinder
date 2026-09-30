@@ -151,6 +151,16 @@ export async function getReportedNotifications(): Promise<AppNotification[]> {
   return (data as Record<string, unknown>[]).map(mapNotification)
 }
 
+export async function getFullNotifications(): Promise<AppNotification[]> {
+  const { data, error } = await supabase
+    .from('app_notifications')
+    .select('*')
+    .neq('reported', true)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data as Record<string, unknown>[]).map(mapNotification)
+}
+
 export async function sendContactRequest(payload: Omit<AppNotification, 'id' | 'createdAt' | 'read' | 'finalizado'>): Promise<{ success: boolean; error?: string }> {
   if (!payload.senderUserId || payload.senderUserId === payload.recipientUserId) return { success: false, error: 'No puedes enviarte una solicitud a ti mismo.' }
   if (payload.evidenceImages.length !== 2) return { success: false, error: 'Debes adjuntar exactamente 2 fotografías como evidencia.' }
