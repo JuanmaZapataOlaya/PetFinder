@@ -43,9 +43,12 @@ let nextMessageId = 3
 let proactiveMessageIndex = 0
 let proactiveMessageTimer: ReturnType<typeof setInterval> | undefined
 let proactiveMessageHideTimer: ReturnType<typeof setTimeout> | undefined
-let realtimePeerConnection: RTCPeerConnection | null = null
-let realtimeDataChannel: RTCDataChannel | null = null
+let realtimeWebSocket: WebSocket | null = null
 let microphoneStream: MediaStream | null = null
+let audioContext: AudioContext | null = null
+let audioInputProcessor: ScriptProcessorNode | null = null
+let audioMediaStreamSource: MediaStreamAudioSourceNode | null = null
+let nextPlaybackTime = 0
 
 async function initSession() {
   const user = getCurrentUser()
@@ -67,8 +70,58 @@ function closeChat() {
   isChatOpen.value = false
 }
 
+function convertFloat32ToInt16(float32Array: Float32Array): Int16Array {
+  const int16 = new Int16Array(float32Array.length)
+  for (let i = 0; i < float32Array.length; i++) {
+    const sample = Math.max(-1, Math.min(1, float32Array[i] ?? 0))
+    int16[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff
+  }
+  return int16
+}
+
+function arrayBufferToBase64(buffer: ArrayBufferLike): string {
+  let binary = ''
+  const bytes = new Uint8Array(buffer)
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i] ?? 0)
+  }
+  return btoa(binary)
+}
+
+function playAudioChunk(base64Audio: string) {
+  if (!audioContext || audioContext.state === 'closed') return
+  if (audioContext.state === 'suspended') {
+    void audioContext.resume()
+  }
+
+  const binaryString = atob(base64Audio)
+  const bytes = new Uint8Array(binaryString.length)
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i)
+  }
+  const int16Array = new Int16Array(bytes.buffer)
+  const float32Array = new Float32Array(int16Array.length)
+  for (let i = 0; i < int16Array.length; i++) {
+    const sample = int16Array[i] ?? 0
+    float32Array[i] = sample < 0 ? sample / 32768 : sample / 32767
+  }
+
+  const audioBuffer = audioContext.createBuffer(1, float32Array.length, 24000)
+  audioBuffer.copyToChannel(float32Array, 0)
+
+  const bufferSource = audioContext.createBufferSource()
+  bufferSource.buffer = audioBuffer
+  bufferSource.connect(audioContext.destination)
+
+  const startTime = Math.max(audioContext.currentTime, nextPlaybackTime)
+  bufferSource.start(startTime)
+  nextPlaybackTime = startTime + audioBuffer.duration
+}
+
 function sendRealtimeEvent(event: Record<string, unknown>) {
-  if (realtimeDataChannel?.readyState === 'open') realtimeDataChannel.send(JSON.stringify(event))
+  if (realtimeWebSocket?.readyState === WebSocket.OPEN) {
+    realtimeWebSocket.send(JSON.stringify(event))
+  }
 }
 
 function addRealtimeTranscript(role: 'user' | 'assistant', content: unknown) {
@@ -76,14 +129,41 @@ function addRealtimeTranscript(role: 'user' | 'assistant', content: unknown) {
   chatMessages.value.push({ id: nextMessageId++, role, content: content.trim(), timestamp: new Date() })
 }
 
-function handleRealtimeEvent(event: MessageEvent<string>) {
+function handleRealtimeMessage(event: MessageEvent<string>) {
   try {
-    const payload = JSON.parse(event.data) as { type?: string; transcript?: string }
-    if (payload.type === 'conversation.item.input_audio_transcription.completed') {
+    const payload = JSON.parse(event.data) as Record<string, unknown>
+    const type = payload.type as string | undefined
+
+    if (type === 'response.audio.delta' && typeof payload.delta === 'string') {
+      playAudioChunk(payload.delta)
+    }
+
+    if (type === 'conversation.item.input_audio_transcription.completed' && typeof payload.transcript === 'string') {
       addRealtimeTranscript('user', payload.transcript)
     }
-    if (payload.type === 'response.audio_transcript.done' || payload.type === 'response.output_audio_transcript.done') {
+    if (
+      (type === 'response.audio_transcript.done' || type === 'response.output_audio_transcript.done') &&
+      typeof payload.transcript === 'string'
+    ) {
       addRealtimeTranscript('assistant', payload.transcript)
+    }
+
+    if (type === 'response.function_call_arguments.done') {
+      const name = payload.name as AgentAction | undefined
+      const rawArgs = payload.arguments
+      let parsedArgs: Record<string, unknown> = {}
+      if (typeof rawArgs === 'string') {
+        try {
+          parsedArgs = JSON.parse(rawArgs)
+        } catch {
+          parsedArgs = {}
+        }
+      } else if (rawArgs && typeof rawArgs === 'object') {
+        parsedArgs = rawArgs as Record<string, unknown>
+      }
+      if (name) {
+        handleAgentAction(name, parsedArgs)
+      }
     }
   } catch {
     agentError.value = 'Se recibió un evento de voz inválido.'
@@ -93,10 +173,23 @@ function handleRealtimeEvent(event: MessageEvent<string>) {
 async function endRealtimeSession() {
   microphoneStream?.getTracks().forEach((track) => track.stop())
   microphoneStream = null
-  realtimeDataChannel?.close()
-  realtimeDataChannel = null
-  realtimePeerConnection?.close()
-  realtimePeerConnection = null
+  if (audioInputProcessor) {
+    audioInputProcessor.disconnect()
+    audioInputProcessor = null
+  }
+  if (audioMediaStreamSource) {
+    audioMediaStreamSource.disconnect()
+    audioMediaStreamSource = null
+  }
+  if (audioContext && audioContext.state !== 'closed') {
+    void audioContext.close()
+    audioContext = null
+  }
+  nextPlaybackTime = 0
+  if (realtimeWebSocket) {
+    realtimeWebSocket.close()
+    realtimeWebSocket = null
+  }
   if (remoteAudio.value) remoteAudio.value.srcObject = null
   isRealtimeActive.value = false
   isRealtimeStarting.value = false
@@ -114,49 +207,60 @@ async function startRealtimeSession() {
     if (!agentSessionId.value) throw new Error('No hay una sesión activa del asistente.')
 
     const session = await createRealtimeSession(agentSessionId.value)
+    const targetModel = session.model || '@azure-openai-eus2/gpt-realtime-2.1-mini'
+    const defaultWsUrl = `wss://portkeygateway.perficient.com/v1/realtime?model=${encodeURIComponent(targetModel)}`
+    const wsUrl = session.ws_url || defaultWsUrl
+
     microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    realtimePeerConnection = new RTCPeerConnection()
-    realtimeDataChannel = realtimePeerConnection.createDataChannel('oai-events')
-    realtimeDataChannel.addEventListener('message', handleRealtimeEvent)
-    realtimeDataChannel.addEventListener('open', () => {
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    audioContext = new AudioCtx({ sampleRate: 24000 })
+    nextPlaybackTime = audioContext.currentTime
+
+    realtimeWebSocket = new WebSocket(wsUrl)
+
+    realtimeWebSocket.addEventListener('open', () => {
+      isRealtimeActive.value = true
+      isRealtimeStarting.value = false
+
       sendRealtimeEvent({
         type: 'session.update',
         session: {
-          audio: {
-            input: { format: { type: 'audio/pcm', rate: 24000 } },
-            output: { format: { type: 'audio/pcm', rate: 24000 } },
-          },
           tools: session.tools,
+          input_audio_transcription: { model: 'whisper-1' },
+          turn_detection: { type: 'server_vad' },
         },
       })
-    })
-    realtimePeerConnection.addEventListener('track', (event) => {
-      if (remoteAudio.value && event.streams[0]) {
-        remoteAudio.value.srcObject = event.streams[0]
-        void remoteAudio.value.play()
+
+      if (audioContext && microphoneStream) {
+        audioMediaStreamSource = audioContext.createMediaStreamSource(microphoneStream)
+        audioInputProcessor = audioContext.createScriptProcessor(4096, 1, 1)
+        audioInputProcessor.onaudioprocess = (event) => {
+          if (!isRealtimeActive.value || realtimeWebSocket?.readyState !== WebSocket.OPEN) return
+          const inputData = event.inputBuffer.getChannelData(0)
+          const pcm16 = convertFloat32ToInt16(inputData)
+          const base64Audio = arrayBufferToBase64(pcm16.buffer)
+          sendRealtimeEvent({
+            type: 'input_audio_buffer.append',
+            audio: base64Audio,
+          })
+        }
+        audioMediaStreamSource.connect(audioInputProcessor)
+        audioInputProcessor.connect(audioContext.destination)
       }
     })
-    realtimePeerConnection.addEventListener('connectionstatechange', () => {
-      if (realtimePeerConnection?.connectionState === 'failed') {
-        agentError.value = 'La conexión de voz se interrumpió.'
+
+    realtimeWebSocket.addEventListener('message', handleRealtimeMessage)
+
+    realtimeWebSocket.addEventListener('error', () => {
+      agentError.value = 'Error en la conexión con el servicio de voz en tiempo real.'
+      void endRealtimeSession()
+    })
+
+    realtimeWebSocket.addEventListener('close', () => {
+      if (isRealtimeActive.value) {
         void endRealtimeSession()
       }
     })
-    microphoneStream.getTracks().forEach((track) => realtimePeerConnection?.addTrack(track, microphoneStream as MediaStream))
-
-    const offer = await realtimePeerConnection.createOffer()
-    await realtimePeerConnection.setLocalDescription(offer)
-    const response = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(session.model)}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${session.client_secret.value}`,
-        'Content-Type': 'application/sdp',
-      },
-      body: offer.sdp,
-    })
-    if (!response.ok) throw new Error('No fue posible conectar la sesión de voz.')
-    await realtimePeerConnection.setRemoteDescription({ type: 'answer', sdp: await response.text() })
-    isRealtimeActive.value = true
   } catch (error) {
     await endRealtimeSession()
     agentError.value = error instanceof Error ? error.message : 'No fue posible iniciar la sesión de voz.'

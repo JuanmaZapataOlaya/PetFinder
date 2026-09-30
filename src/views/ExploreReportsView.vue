@@ -276,6 +276,10 @@ function formatDistance(meters: number): string {
       <div class="detail-summary"><span>{{ selectedTicket.type }} · {{ selectedTicket.breed || 'Raza no especificada' }}</span><strong>{{ selectedTicket.color || 'Color no especificado' }}</strong><small>{{ selectedTicket.note }}</small></div>
       <div class="owner-contact"><h3>Información del Propietario</h3><div v-if="ownerContactInfo"><p><strong>Nombre:</strong> {{ ownerContactInfo.fullName || 'No especificado' }}</p><p><strong>Teléfono:</strong> {{ ownerContactInfo.phoneNumber || 'No especificado' }}</p><p><strong>Email:</strong> {{ ownerContactInfo.email || 'No especificado' }}</p></div><p v-else class="owner-contact-empty">No se encuentra información de contacto disponible.</p>
         <div v-if="selectedTicket.ownerId !== currentUser?.id" class="contact-actions">
+          <p class="proof-notice">
+            <template v-if="selectedTicket.kind === 'Perdida'">Esta mascota está reportada como perdida. Para contactar al propietario, debes subir imágenes que demuestren que tienes a la mascota.</template>
+            <template v-else>Esta mascota está reportada como encontrada. Para contactar a quien la encontró, debes subir imágenes que demuestren que eres el dueño de la mascota.</template>
+          </p>
           <button v-if="!showContactForm" class="primary-button" @click="showContactForm = true">Contactar al propietario</button>
           <ContactRequestForm
             v-if="showContactForm"
@@ -317,6 +321,7 @@ function formatDistance(meters: number): string {
 .owner-contact p { margin: 0; font-size: .9rem; }
 .owner-contact-empty { color: #666; font-style: italic; }
 .contact-actions { margin-top: 1rem; }
+.proof-notice { margin-bottom: .75rem !important; color: #42623a; font-size: .85rem !important; font-weight: 600; }
 @media (max-width: 950px) {
   .explore-layout { grid-template-columns: 1fr; }
   .explore-map-panel { padding-left: 0; }

@@ -12,8 +12,9 @@ export interface AgentResponse {
 
 export interface RealtimeSession {
   session_id: string
-  model: 'gpt-realtime-2.1-mini'
-  client_secret: { value: string; expires_at: number }
+  model: string
+  ws_url?: string
+  client_secret?: { value: string; expires_at: number }
   tools: Array<Record<string, unknown>>
 }
 
@@ -45,7 +46,7 @@ export async function createRealtimeSession(sessionId: string): Promise<Realtime
     body: { session_id: sessionId, operation: 'realtime_session' },
   })
   if (error) throw error
-  if (!data?.client_secret?.value) throw new Error('No fue posible iniciar la sesión de voz.')
+  if (!data?.session_id) throw new Error('No fue posible iniciar la sesión de voz.')
   return data
 }
 
