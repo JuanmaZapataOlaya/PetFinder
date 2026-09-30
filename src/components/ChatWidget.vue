@@ -2,7 +2,8 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { AUTH_STATE_CHANGED_EVENT, getCurrentUser } from '@/services/authService'
-import { executeAgentAction, sendAgentMessage, startAgentSession, type AgentAction } from '@/services/agentService'
+import { createRealtimeSession, executeAgentAction, sendAgentMessage, startAgentSession, type AgentAction } from '@/services/agentService'
+import Icon from '@/components/Icon.vue'
 import TutorialConfirmationModal from '@/components/TutorialConfirmationModal.vue'
 import { useTutorial } from '@/composables/useTutorial'
 
@@ -20,8 +21,12 @@ const draftMessage = ref('')
 const agentSessionId = ref<string | null>(null)
 const isAgentLoading = ref(false)
 const agentError = ref('')
+const isRealtimeActive = ref(false)
+const isRealtimeStarting = ref(false)
+const realtimeStatus = ref<'listening' | 'userSpeaking' | 'thinking' | 'speaking'>('listening')
 const messagesContainer = ref<HTMLElement | null>(null)
 const proactiveMessage = ref('')
+const remoteAudio = ref<HTMLAudioElement | null>(null)
 
 const proactiveMessages = [
   'Guau, guau... ¿necesitas ayuda con algo?',
@@ -35,10 +40,29 @@ const chatMessages = ref<ChatMessage[]>([
   { id: 2, role: 'assistant', content: 'Puedo orientarte sobre reportes, mascotas y el uso de la plataforma.', timestamp: new Date() },
 ])
 
+const realtimeStatusLabels = {
+  listening: 'Te escucho, habla cuando quieras',
+  userSpeaking: 'Escuchando...',
+  thinking: 'Pensando...',
+  speaking: 'Hablando... (puedes interrumpirme)',
+} as const
+
 let nextMessageId = 3
 let proactiveMessageIndex = 0
 let proactiveMessageTimer: ReturnType<typeof setInterval> | undefined
 let proactiveMessageHideTimer: ReturnType<typeof setTimeout> | undefined
+let realtimeWebSocket: WebSocket | null = null
+let microphoneStream: MediaStream | null = null
+let audioContext: AudioContext | null = null
+let audioInputProcessor: ScriptProcessorNode | null = null
+let audioMediaStreamSource: MediaStreamAudioSourceNode | null = null
+let nextPlaybackTime = 0
+// Assistant audio arrives faster than real time, so it is queued ahead. Tracking the
+// queued sources lets us silence them immediately when the user interrupts.
+const scheduledSources = new Set<AudioBufferSourceNode>()
+const interruptedItemIds = new Set<string>()
+let playingItemId: string | null = null
+let playingItemStartTime = 0
 
 async function initSession() {
   const user = getCurrentUser()
@@ -56,7 +80,249 @@ function toggleChat() {
 }
 
 function closeChat() {
+  if (isRealtimeActive.value || isRealtimeStarting.value) return
   isChatOpen.value = false
+}
+
+function convertFloat32ToInt16(float32Array: Float32Array): Int16Array {
+  const int16 = new Int16Array(float32Array.length)
+  for (let i = 0; i < float32Array.length; i++) {
+    const sample = Math.max(-1, Math.min(1, float32Array[i] ?? 0))
+    int16[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff
+  }
+  return int16
+}
+
+function arrayBufferToBase64(buffer: ArrayBufferLike): string {
+  let binary = ''
+  const bytes = new Uint8Array(buffer)
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i] ?? 0)
+  }
+  return btoa(binary)
+}
+
+function playAudioChunk(base64Audio: string, itemId: string | null) {
+  if (!audioContext || audioContext.state === 'closed') return
+  if (itemId && interruptedItemIds.has(itemId)) return
+  if (audioContext.state === 'suspended') {
+    void audioContext.resume()
+  }
+
+  const binaryString = atob(base64Audio)
+  const bytes = new Uint8Array(binaryString.length)
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i)
+  }
+  const int16Array = new Int16Array(bytes.buffer)
+  const float32Array = new Float32Array(int16Array.length)
+  for (let i = 0; i < int16Array.length; i++) {
+    const sample = int16Array[i] ?? 0
+    float32Array[i] = sample < 0 ? sample / 32768 : sample / 32767
+  }
+
+  const audioBuffer = audioContext.createBuffer(1, float32Array.length, 24000)
+  audioBuffer.copyToChannel(float32Array, 0)
+
+  const bufferSource = audioContext.createBufferSource()
+  bufferSource.buffer = audioBuffer
+  bufferSource.connect(audioContext.destination)
+
+  const startTime = Math.max(audioContext.currentTime, nextPlaybackTime)
+  if (itemId !== playingItemId) {
+    playingItemId = itemId
+    playingItemStartTime = startTime
+  }
+  scheduledSources.add(bufferSource)
+  bufferSource.addEventListener('ended', () => {
+    scheduledSources.delete(bufferSource)
+    if (scheduledSources.size === 0 && realtimeStatus.value === 'speaking') realtimeStatus.value = 'listening'
+  })
+  bufferSource.start(startTime)
+  nextPlaybackTime = startTime + audioBuffer.duration
+  realtimeStatus.value = 'speaking'
+}
+
+function interruptAssistantAudio() {
+  if (!audioContext) return
+  const now = audioContext.currentTime
+  if (playingItemId && nextPlaybackTime > now) {
+    // Tell the model how much of its answer the user actually heard.
+    const playedMs = Math.max(0, Math.floor((now - playingItemStartTime) * 1000))
+    sendRealtimeEvent({ type: 'conversation.item.truncate', item_id: playingItemId, content_index: 0, audio_end_ms: playedMs })
+    interruptedItemIds.add(playingItemId)
+  }
+  scheduledSources.forEach((source) => {
+    try {
+      source.stop()
+    } catch {
+      // Source already finished.
+    }
+  })
+  scheduledSources.clear()
+  playingItemId = null
+  nextPlaybackTime = now
+}
+
+function sendRealtimeEvent(event: Record<string, unknown>) {
+  if (realtimeWebSocket?.readyState === WebSocket.OPEN) {
+    realtimeWebSocket.send(JSON.stringify(event))
+  }
+}
+
+function handleRealtimeMessage(event: MessageEvent<string>) {
+  try {
+    const payload = JSON.parse(event.data) as Record<string, unknown>
+    const type = payload.type as string | undefined
+
+    if ((type === 'response.audio.delta' || type === 'response.output_audio.delta') && typeof payload.delta === 'string') {
+      playAudioChunk(payload.delta, typeof payload.item_id === 'string' ? payload.item_id : null)
+    }
+
+    if (type === 'input_audio_buffer.speech_started') {
+      // Barge-in: the server cancels its response; we stop what is still queued locally.
+      interruptAssistantAudio()
+      realtimeStatus.value = 'userSpeaking'
+    }
+    if (type === 'input_audio_buffer.speech_stopped') {
+      realtimeStatus.value = 'thinking'
+    }
+    if (type === 'response.done' && scheduledSources.size === 0 && realtimeStatus.value === 'thinking') {
+      realtimeStatus.value = 'listening'
+    }
+
+    if (type === 'error') {
+      const errorDetail = payload.error as { message?: unknown; code?: unknown } | undefined
+      // Truncating/cancelling right as a response ends is a benign race.
+      if (errorDetail?.code === 'response_cancel_not_active' || /truncat/i.test(String(errorDetail?.message ?? ''))) return
+      agentError.value = typeof errorDetail?.message === 'string'
+        ? `Error del servicio de voz: ${errorDetail.message}`
+        : 'Error en el servicio de voz en tiempo real.'
+    }
+
+    if (type === 'response.function_call_arguments.done') {
+      const name = payload.name as AgentAction | undefined
+      const rawArgs = payload.arguments
+      let parsedArgs: Record<string, unknown> = {}
+      if (typeof rawArgs === 'string') {
+        try {
+          parsedArgs = JSON.parse(rawArgs)
+        } catch {
+          parsedArgs = {}
+        }
+      } else if (rawArgs && typeof rawArgs === 'object') {
+        parsedArgs = rawArgs as Record<string, unknown>
+      }
+      if (name) {
+        handleAgentAction(name, parsedArgs)
+        if (typeof payload.call_id === 'string') {
+          sendRealtimeEvent({
+            type: 'conversation.item.create',
+            item: { type: 'function_call_output', call_id: payload.call_id, output: JSON.stringify({ status: 'ok' }) },
+          })
+          sendRealtimeEvent({ type: 'response.create' })
+        }
+      }
+    }
+  } catch {
+    agentError.value = 'Se recibió un evento de voz inválido.'
+  }
+}
+
+async function endRealtimeSession() {
+  microphoneStream?.getTracks().forEach((track) => track.stop())
+  microphoneStream = null
+  if (audioInputProcessor) {
+    audioInputProcessor.disconnect()
+    audioInputProcessor = null
+  }
+  if (audioMediaStreamSource) {
+    audioMediaStreamSource.disconnect()
+    audioMediaStreamSource = null
+  }
+  if (audioContext && audioContext.state !== 'closed') {
+    void audioContext.close()
+    audioContext = null
+  }
+  nextPlaybackTime = 0
+  scheduledSources.clear()
+  interruptedItemIds.clear()
+  playingItemId = null
+  realtimeStatus.value = 'listening'
+  if (realtimeWebSocket) {
+    realtimeWebSocket.close()
+    realtimeWebSocket = null
+  }
+  if (remoteAudio.value) remoteAudio.value.srcObject = null
+  isRealtimeActive.value = false
+  isRealtimeStarting.value = false
+}
+
+async function startRealtimeSession() {
+  if (isRealtimeActive.value || isRealtimeStarting.value) return
+  isRealtimeStarting.value = true
+  agentError.value = ''
+  try {
+    if (!agentSessionId.value) {
+      const user = getCurrentUser()
+      if (user) agentSessionId.value = await startAgentSession(user.id)
+    }
+    if (!agentSessionId.value) throw new Error('No hay una sesión activa del asistente.')
+
+    const session = await createRealtimeSession(agentSessionId.value)
+
+    // Echo cancellation keeps the assistant's own voice from triggering an interruption.
+    microphoneStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    })
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    audioContext = new AudioCtx({ sampleRate: 24000 })
+    nextPlaybackTime = audioContext.currentTime
+
+    realtimeWebSocket = new WebSocket(session.ws_url)
+
+    realtimeWebSocket.addEventListener('open', () => {
+      isRealtimeActive.value = true
+      isRealtimeStarting.value = false
+
+      // Instructions, tools and audio settings are configured by the agent service.
+
+      if (audioContext && microphoneStream) {
+        audioMediaStreamSource = audioContext.createMediaStreamSource(microphoneStream)
+        audioInputProcessor = audioContext.createScriptProcessor(4096, 1, 1)
+        audioInputProcessor.onaudioprocess = (event) => {
+          if (!isRealtimeActive.value || realtimeWebSocket?.readyState !== WebSocket.OPEN) return
+          const inputData = event.inputBuffer.getChannelData(0)
+          const pcm16 = convertFloat32ToInt16(inputData)
+          const base64Audio = arrayBufferToBase64(pcm16.buffer)
+          sendRealtimeEvent({
+            type: 'input_audio_buffer.append',
+            audio: base64Audio,
+          })
+        }
+        audioMediaStreamSource.connect(audioInputProcessor)
+        audioInputProcessor.connect(audioContext.destination)
+      }
+    })
+
+    realtimeWebSocket.addEventListener('message', handleRealtimeMessage)
+
+    realtimeWebSocket.addEventListener('error', () => {
+      agentError.value = 'Error en la conexión con el servicio de voz en tiempo real.'
+      void endRealtimeSession()
+    })
+
+    realtimeWebSocket.addEventListener('close', () => {
+      if (isRealtimeActive.value) {
+        void endRealtimeSession()
+      }
+    })
+  } catch (error) {
+    await endRealtimeSession()
+    agentError.value = error instanceof Error ? error.message : 'No fue posible iniciar la sesión de voz.'
+  } finally {
+    isRealtimeStarting.value = false
+  }
 }
 
 function startTutorial() {
@@ -86,6 +352,7 @@ function handleMessageKeydown(event: KeyboardEvent) {
 }
 
 async function sendMessage() {
+  if (isRealtimeActive.value || isRealtimeStarting.value) return
   const content = draftMessage.value.trim()
   if (!content || isAgentLoading.value) return
 
@@ -164,6 +431,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('storage', initSession)
   if (proactiveMessageTimer) clearInterval(proactiveMessageTimer)
   if (proactiveMessageHideTimer) clearTimeout(proactiveMessageHideTimer)
+  void endRealtimeSession()
 })
 </script>
 
@@ -182,7 +450,7 @@ onBeforeUnmount(() => {
         <img src="/media/LogoAgente.png" alt="" />
         <div><strong>Asistente Virtual</strong><span><i /> En línea</span></div>
       </div>
-      <button type="button" class="chat-close" aria-label="Cerrar asistente virtual" @click="closeChat">×</button>
+      <button v-if="!isRealtimeActive && !isRealtimeStarting" type="button" class="chat-close" aria-label="Cerrar asistente virtual" @click="closeChat">×</button>
     </header>
     <div ref="messagesContainer" class="chat-messages" role="log" aria-live="polite">
       <div v-for="message in chatMessages" :key="message.id" class="chat-message" :class="`chat-message--${message.role}`">
@@ -196,11 +464,18 @@ onBeforeUnmount(() => {
       <p v-if="isAgentLoading" class="chat-status" role="status">El asistente está escribiendo...</p>
       <p v-else-if="agentError" class="chat-status chat-status--error" role="alert">{{ agentError }}</p>
     </div>
-    <form class="chat-composer" @submit.prevent="sendMessage">
+    <div v-if="isRealtimeActive || isRealtimeStarting" class="realtime-panel">
+      <span class="realtime-indicator" :class="{ 'realtime-indicator--starting': isRealtimeStarting }" />
+      <p>{{ isRealtimeStarting ? 'Conectando al asistente...' : realtimeStatusLabels[realtimeStatus] }}</p>
+      <button type="button" :disabled="isRealtimeStarting" @click="endRealtimeSession">Finalizar sesión</button>
+    </div>
+    <form v-else class="chat-composer" @submit.prevent="sendMessage">
       <textarea v-model="draftMessage" rows="1" aria-label="Escribe tu mensaje" placeholder="Escribe tu mensaje..." @keydown="handleMessageKeydown" />
       <button type="submit" aria-label="Enviar mensaje" :disabled="!draftMessage.trim()">➤</button>
+      <button type="button" class="voice-button" aria-label="Activar asistente por voz" title="Activar asistente por voz" @click="startRealtimeSession"><Icon name="mic" :size="17" /></button>
       <small>Enter para enviar · Shift + Enter para una nueva línea</small>
     </form>
+    <audio ref="remoteAudio" autoplay />
   </section>
   <TutorialConfirmationModal
     :visible="isConfirmationVisible"
@@ -294,7 +569,14 @@ onBeforeUnmount(() => {
 .chat-composer textarea:focus { border-color: #8eb66d; }
 .chat-composer button { align-self: start; width: 38px; height: 38px; border: 0; border-radius: 9px; background: #173c32; color: white; font-size: 18px; }
 .chat-composer button:disabled { cursor: not-allowed; opacity: .45; }
+.voice-button { grid-column: 2; grid-row: 2; display: grid; place-items: center; border: 1px solid #bfd0bb !important; background: #f0f6ed !important; color: #173c32 !important; }
 .chat-composer small { position: absolute; bottom: 8px; left: 15px; color: #8a968d; font-size: 9px; }
+.realtime-panel { display: flex; align-items: center; gap: 10px; padding: 15px; border-top: 1px solid #dfe8dc; background: white; }
+.realtime-panel p { flex: 1; margin: 0; color: #34493b; font-size: 12px; }
+.realtime-panel button { border: 0; border-radius: 8px; padding: 9px 12px; background: #b5533e; color: white; font-size: 11px; }
+.realtime-panel button:disabled { cursor: wait; opacity: .55; }
+.realtime-indicator { width: 10px; height: 10px; flex: 0 0 auto; border-radius: 50%; background: #78ad58; box-shadow: 0 0 0 4px #dcebd7; }
+.realtime-indicator--starting { background: #d09a48; box-shadow: 0 0 0 4px #f3e5c9; }
 @media (max-width: 650px) {
   .proactive-message { right: 86px; bottom: 25px; max-width: 190px; }
   .chat-launcher { right: 16px; bottom: 16px; width: 58px; height: 58px; }

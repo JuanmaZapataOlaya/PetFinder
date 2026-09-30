@@ -10,6 +10,7 @@ function mapNotification(row: Record<string, unknown>): AppNotification {
     evidenceImages: Array.isArray(row.evidence_images) ? row.evidence_images as NotificationEvidenceImage[] : [],
     agentReport: row.agent_report ? String(row.agent_report) : undefined,
     createdAt: new Date(String(row.created_at)).getTime(), read: Boolean(row.read), finalizado: Boolean(row.finalizado),
+    reported: Boolean(row.reported), reasonOfReport: row.reason_of_report ? String(row.reason_of_report) : undefined,
   }
 }
 
@@ -25,8 +26,32 @@ export async function updateNotificationRead(userId: string, notificationId: str
 }
 
 export async function finalizeNotification(userId: string, notificationId: string): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase.from('app_notifications').update({ finalizado: true }).eq('id', notificationId).eq('recipient_user_id', userId)
-  return error ? { success: false, error: error.message } : { success: true }
+  const { data: notification, error: fetchError } = await supabase
+    .from('app_notifications')
+    .select('report_id')
+    .eq('id', notificationId)
+    .eq('recipient_user_id', userId)
+    .single()
+
+  if (fetchError) return { success: false, error: fetchError.message }
+  if (!notification) return { success: false, error: 'Notificación no encontrada' }
+
+  const { error: notifError } = await supabase
+    .from('app_notifications')
+    .update({ finalizado: true })
+    .eq('id', notificationId)
+    .eq('recipient_user_id', userId)
+
+  if (notifError) return { success: false, error: notifError.message }
+
+  const { error: ticketError } = await supabase
+    .from('pet_tickets')
+    .update({ status: 'Resuelta' })
+    .eq('id', notification.report_id)
+
+  if (ticketError) return { success: false, error: ticketError.message }
+
+  return { success: true }
 }
 
 type HistoryNotificationRow = {
@@ -107,6 +132,35 @@ export async function deleteNotification(userId: string, notificationId: string)
   return error ? { success: false, error: error.message } : { success: true }
 }
 
+export async function reportNotification(userId: string, notificationId: string, reason: string): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('app_notifications')
+    .update({ reported: true, reason_of_report: reason })
+    .eq('id', notificationId)
+    .eq('recipient_user_id', userId)
+  return error ? { success: false, error: error.message } : { success: true }
+}
+
+export async function getReportedNotifications(): Promise<AppNotification[]> {
+  const { data, error } = await supabase
+    .from('app_notifications')
+    .select('*')
+    .eq('reported', true)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data as Record<string, unknown>[]).map(mapNotification)
+}
+
+export async function getFullNotifications(): Promise<AppNotification[]> {
+  const { data, error } = await supabase
+    .from('app_notifications')
+    .select('*')
+    .neq('reported', true)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data as Record<string, unknown>[]).map(mapNotification)
+}
+
 export async function sendContactRequest(payload: Omit<AppNotification, 'id' | 'createdAt' | 'read' | 'finalizado'>): Promise<{ success: boolean; error?: string }> {
   if (!payload.senderUserId || payload.senderUserId === payload.recipientUserId) return { success: false, error: 'No puedes enviarte una solicitud a ti mismo.' }
   if (payload.evidenceImages.length !== 2) return { success: false, error: 'Debes adjuntar exactamente 2 fotografías como evidencia.' }
@@ -126,8 +180,6 @@ export async function sendContactRequest(payload: Omit<AppNotification, 'id' | '
     evidence_images: payload.evidenceImages,
   }).select().single()
   if (error) return { success: false, error: error.message }
-  const audit = await supabase.from('audit_logs').insert({ action: 'CONTACT_REQUEST_SENT', data: data })
-  if (audit.error) return { success: false, error: audit.error.message }
 
   const { error: agentError } = await supabase.functions.invoke('validate-claim-agent', {
     body: {
