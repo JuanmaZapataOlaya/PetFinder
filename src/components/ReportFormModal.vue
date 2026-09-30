@@ -10,6 +10,7 @@ import type { PetTicket, PetType, TicketKind } from '@/types'
 const props = defineProps<{
   visible: boolean
   editingTicket: PetTicket | null
+  initialData?: { type?: PetType; kind?: TicketKind; name?: string; breed?: string; color?: string; description?: string } | null
   otherMarkersForMap: Array<{ latitude: number; longitude: number; image: string; name: string }>
 }>()
 
@@ -36,8 +37,9 @@ const reportLongitude = ref(-99.1332)
 
 const breeds = computed(() => breedsByType[reportType.value])
 
-watch(() => props.editingTicket, (ticket) => {
-  if (ticket) {
+watch(() => [props.editingTicket, props.initialData], () => {
+  if (props.editingTicket) {
+    const ticket = props.editingTicket
     reportName.value = ticket.name
     reportType.value = ticket.type
     reportKind.value = ticket.kind
@@ -49,6 +51,19 @@ watch(() => props.editingTicket, (ticket) => {
     imageFile.value = null
     reportLatitude.value = ticket.latitude
     reportLongitude.value = ticket.longitude
+  } else if (props.initialData) {
+    const init = props.initialData
+    reportName.value = init.name || ''
+    reportType.value = init.type || 'Perro'
+    reportKind.value = init.kind || 'Perdida'
+    reportLocation.value = ''
+    reportColor.value = init.color || ''
+    reportBreed.value = init.breed || ''
+    reportNote.value = init.description || ''
+    imagePreview.value = ''
+    imageFile.value = null
+    reportLatitude.value = 19.4326
+    reportLongitude.value = -99.1332
   } else {
     reportName.value = ''
     reportType.value = 'Perro'
@@ -63,7 +78,7 @@ watch(() => props.editingTicket, (ticket) => {
     reportLongitude.value = -99.1332
   }
   descriptionError.value = ''
-}, { immediate: true })
+}, { immediate: true, deep: true })
 
 function handleImage(event: Event) {
   const input = event.target as HTMLInputElement

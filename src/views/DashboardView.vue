@@ -12,6 +12,7 @@ const search = ref('')
 const showModal = ref(false)
 const showToast = ref(false)
 const editingTicket = ref<PetTicket | null>(null)
+const initialModalData = ref<{ type?: PetType; kind?: TicketKind; name?: string; breed?: string; color?: string; description?: string } | null>(null)
 const currentUser = computed(() => getCurrentUser())
 const route = useRoute()
 const router = useRouter()
@@ -31,11 +32,13 @@ const otherMarkersForMap = computed(() =>
 
 function openCreate() {
   editingTicket.value = null
+  initialModalData.value = null
   showModal.value = true
 }
 
 function openEdit(ticket: PetTicket) {
   editingTicket.value = ticket
+  initialModalData.value = null
   showModal.value = true
 }
 
@@ -55,7 +58,16 @@ function onModalSaved() {
 
 onMounted(() => {
   if (route.query.action === 'create') {
-    openCreate()
+    editingTicket.value = null
+    initialModalData.value = {
+      type: (route.query.type as PetType) || 'Perro',
+      kind: (route.query.kind as TicketKind) || 'Perdida',
+      name: (route.query.name as string) || '',
+      breed: (route.query.breed as string) || '',
+      color: (route.query.color as string) || '',
+      description: (route.query.description as string) || '',
+    }
+    showModal.value = true
     void router.replace({ query: {} })
   }
 })
@@ -161,6 +173,7 @@ onMounted(() => {
   <ReportFormModal
     :visible="showModal"
     :editing-ticket="editingTicket"
+    :initial-data="initialModalData"
     :other-markers-for-map="otherMarkersForMap"
     @close="showModal = false"
     @saved="onModalSaved"

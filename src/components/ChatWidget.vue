@@ -130,6 +130,7 @@ function handleAgentAction(action: AgentAction | null, payload: Record<string, u
       action: 'create',
       type: reportKind,
       kind: reportType,
+      name: typeof result.params.name === 'string' ? result.params.name : '',
       breed: typeof result.params.breed === 'string' ? result.params.breed : '',
       color: typeof result.params.color === 'string' ? result.params.color : '',
       description: typeof result.params.description === 'string' ? result.params.description : '',
