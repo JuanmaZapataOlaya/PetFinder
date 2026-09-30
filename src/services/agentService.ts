@@ -13,9 +13,8 @@ export interface AgentResponse {
 export interface RealtimeSession {
   session_id: string
   model: string
-  ws_url?: string
-  client_secret?: { value: string; expires_at: number }
-  tools: Array<Record<string, unknown>>
+  ws_url: string
+  expires_in: number
 }
 
 export interface AgentActionResult {
@@ -46,7 +45,7 @@ export async function createRealtimeSession(sessionId: string): Promise<Realtime
     body: { session_id: sessionId, operation: 'realtime_session' },
   })
   if (error) throw error
-  if (!data?.session_id) throw new Error('No fue posible iniciar la sesión de voz.')
+  if (!data?.session_id || !data.ws_url) throw new Error('No fue posible iniciar la sesión de voz.')
   return data
 }
 

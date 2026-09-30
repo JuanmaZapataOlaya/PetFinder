@@ -15,8 +15,8 @@ describe('agentService realtime', () => {
     const session = {
       session_id: 'session-1',
       model: 'gpt-realtime-2.1-mini',
-      client_secret: { value: 'secret', expires_at: 123 },
-      tools: [],
+      ws_url: 'wss://agent.example/realtime/ws?ticket=abc',
+      expires_in: 60,
     }
     invoke.mockResolvedValue({ data: session, error: null })
 
@@ -25,5 +25,12 @@ describe('agentService realtime', () => {
     expect(invoke).toHaveBeenCalledWith('agent-gateway', {
       body: { session_id: 'session-1', operation: 'realtime_session' },
     })
+  })
+
+  it('rechaza una sesión realtime sin ws_url', async () => {
+    invoke.mockResolvedValue({ data: { session_id: 'session-1', model: 'm', expires_in: 60 }, error: null })
+
+    const { createRealtimeSession } = await import('@/services/agentService')
+    await expect(createRealtimeSession('session-1')).rejects.toThrow('No fue posible iniciar la sesión de voz.')
   })
 })
