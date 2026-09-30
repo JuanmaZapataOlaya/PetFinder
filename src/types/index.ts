@@ -50,6 +50,8 @@ export interface AppNotification {
   createdAt: number;
   read: boolean;
   finalizado: boolean;
+  reported?: boolean;
+  reasonOfReport?: string;
 }
 
 export interface NotificationEvidenceImage {

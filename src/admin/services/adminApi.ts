@@ -57,3 +57,15 @@ export async function getAuditLogs(limit = 100, offset = 0) {
   if (error) throw error
   return data || []
 }
+
+export async function getAllClaims() {
+  const { data, error } = await supabase
+    .from('app_notifications') // Asegúrate de que esta sea la tabla correcta de reclamos
+    // Traemos todo de la tabla base (*), más los campos específicos de la relación
+    .select('*, pet_tickets(name, kind, location)') 
+    .eq('reported', false)
+    .order('created_at', { ascending: false })
+    
+  if (error) throw error
+  return data || []
+}
