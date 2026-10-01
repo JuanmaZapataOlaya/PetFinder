@@ -8,7 +8,10 @@ const yesButton = ref<HTMLButtonElement | null>(null)
 watch(() => props.visible, async (visible) => {
   if (!visible) return
   await nextTick()
-  yesButton.value?.focus()
+  const btn = yesButton.value
+  if (btn) {
+    btn.focus()
+  }
 }, { immediate: true })
 </script>
 
