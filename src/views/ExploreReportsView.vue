@@ -99,15 +99,22 @@ watch([searchResults, kind, type], () => {
 
 watch([kind, type], applySearchFilters)
 
-watch(() => route.query.q, (value) => {
-  if (typeof value === 'string' && value.trim()) {
-    search.value = value
-    void submitSearch(search.value)
-    return
-  }
+const TICKET_KINDS: TicketKind[] = ['Perdida', 'Encontrada']
+const PET_TYPES: PetType[] = ['Perro', 'Gato', 'Ave', 'Otro']
 
-  search.value = ''
-  void submitSearch(DEFAULT_SEARCH_QUERY)
+function readQueryOption<T extends string>(value: unknown, options: T[]): T | '' {
+  return options.includes(value as T) ? value as T : ''
+}
+
+watch(() => [route.query.q, route.query.kind, route.query.type], ([queryValue, kindValue, typeValue]) => {
+  search.value = typeof queryValue === 'string' ? queryValue.trim() : ''
+  const nextKind = readQueryOption(kindValue, TICKET_KINDS)
+  const nextType = readQueryOption(typeValue, PET_TYPES)
+  const filtersChanged = nextKind !== kind.value || nextType !== type.value
+  kind.value = nextKind
+  type.value = nextType
+  // When the filters change, their own watcher already runs the search.
+  if (!filtersChanged) void submitSearch(search.value || DEFAULT_SEARCH_QUERY)
 }, { immediate: true })
 
 function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -240,7 +247,7 @@ function formatDistance(meters: number): string {
       </div>
     </section>
 
-    <section class="matches-section" aria-labelledby="matches-title">
+    <section id="matches" class="matches-section" aria-labelledby="matches-title">
       <div class="unified-section-heading">
         <div>
           <div class="eyebrow">Motor de coincidencias</div>

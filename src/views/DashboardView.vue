@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import ReportFormModal from '@/components/ReportFormModal.vue'
 import { tickets as allTickets } from '@/data/tickets'
 import { getCurrentUser } from '@/services/authService'
-import type { PetTicket } from '@/types'
+import type { PetTicket, PetType, TicketKind } from '@/types'
 
 const activeTab = ref<'Todas' | 'Activas' | 'Resueltas'>('Todas')
 const search = ref('')
@@ -56,8 +56,8 @@ function onModalSaved() {
   window.setTimeout(() => { showToast.value = false }, 3000)
 }
 
-onMounted(() => {
-  if (route.query.action === 'create') {
+watch(() => route.query.action, (action) => {
+  if (action === 'create') {
     editingTicket.value = null
     initialModalData.value = {
       type: (route.query.type as PetType) || 'Perro',
@@ -70,7 +70,7 @@ onMounted(() => {
     showModal.value = true
     void router.replace({ query: {} })
   }
-})
+}, { immediate: true })
 </script>
 
 <template>
