@@ -67,11 +67,39 @@ let playingItemStartTime = 0
 async function initSession() {
   const user = getCurrentUser()
   if (!user) return
-  agentSessionId.value = null
+  const storageKey = `findmypet_agent_session_${user.id}`
+  const savedSessionId = sessionStorage.getItem(storageKey)
+  if (savedSessionId) {
+    agentSessionId.value = savedSessionId
+    return
+  }
   try {
-    agentSessionId.value = await startAgentSession(user.id)
+    const newSessionId = await startAgentSession(user.id)
+    agentSessionId.value = newSessionId
+    sessionStorage.setItem(storageKey, newSessionId)
   } catch {
     agentError.value = 'No fue posible conectar el asistente. Intenta de nuevo más tarde.'
+  }
+}
+
+async function resetSession() {
+  const user = getCurrentUser()
+  if (!user) return
+  const storageKey = `findmypet_agent_session_${user.id}`
+  sessionStorage.removeItem(storageKey)
+  agentSessionId.value = null
+  chatMessages.value = [
+    { id: 1, role: 'assistant', content: '¡Hola! Soy tu asistente virtual de PetFinder.', timestamp: new Date() },
+    { id: 2, role: 'assistant', content: 'Puedo orientarte sobre reportes, mascotas y el uso de la plataforma.', timestamp: new Date() },
+  ]
+  nextMessageId = 3
+  agentError.value = ''
+  try {
+    const newSessionId = await startAgentSession(user.id)
+    agentSessionId.value = newSessionId
+    sessionStorage.setItem(storageKey, newSessionId)
+  } catch {
+    agentError.value = 'No fue posible reiniciar el asistente. Intenta de nuevo más tarde.'
   }
 }
 
@@ -397,6 +425,7 @@ function handleAgentAction(action: AgentAction | null, payload: Record<string, u
       action: 'create',
       type: reportKind,
       kind: reportType,
+      name: typeof result.params.name === 'string' ? result.params.name : '',
       breed: typeof result.params.breed === 'string' ? result.params.breed : '',
       color: typeof result.params.color === 'string' ? result.params.color : '',
       description: typeof result.params.description === 'string' ? result.params.description : '',
@@ -449,6 +478,10 @@ onBeforeUnmount(() => {
       <div class="chat-agent">
         <img src="/media/LogoAgente.png" alt="" />
         <div><strong>Asistente Virtual</strong><span><i /> En línea</span></div>
+      </div>
+      <div class="chat-header-actions">
+        <button type="button" class="chat-reset" aria-label="Reiniciar chat" title="Reiniciar chat y empezar de nuevo" @click="resetSession">↺</button>
+        <button type="button" class="chat-close" aria-label="Cerrar asistente virtual" @click="closeChat">×</button>
       </div>
       <button v-if="!isRealtimeActive && !isRealtimeStarting" type="button" class="chat-close" aria-label="Cerrar asistente virtual" @click="closeChat">×</button>
     </header>
@@ -552,7 +585,10 @@ onBeforeUnmount(() => {
 .chat-agent strong { font-size: 14px; }
 .chat-agent span { margin-top: 4px; color: #c2d7c7; font-size: 11px; }
 .chat-agent i { display: inline-block; width: 7px; height: 7px; margin-right: 4px; border-radius: 50%; background: #a8dc77; }
-.chat-close { border: 0; padding: 2px 6px; background: transparent; color: #d5e5d8; font-size: 26px; line-height: 1; }
+.chat-header-actions { display: flex; align-items: center; gap: 4px; }
+.chat-reset { border: 0; padding: 2px 6px; background: transparent; color: #d5e5d8; font-size: 20px; line-height: 1; cursor: pointer; }
+.chat-reset:hover { color: white; }
+.chat-close { border: 0; padding: 2px 6px; background: transparent; color: #d5e5d8; font-size: 26px; line-height: 1; cursor: pointer; }
 .chat-close:hover { color: white; }
 .chat-messages { flex: 1; overflow-y: auto; padding: 20px 15px; background: #eef4ec; }
 .chat-message { display: flex; margin-bottom: 12px; }
