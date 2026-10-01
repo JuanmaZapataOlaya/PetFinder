@@ -483,7 +483,6 @@ onBeforeUnmount(() => {
         <button type="button" class="chat-reset" aria-label="Reiniciar chat" title="Reiniciar chat y empezar de nuevo" @click="resetSession">↺</button>
         <button type="button" class="chat-close" aria-label="Cerrar asistente virtual" @click="closeChat">×</button>
       </div>
-      <button v-if="!isRealtimeActive && !isRealtimeStarting" type="button" class="chat-close" aria-label="Cerrar asistente virtual" @click="closeChat">×</button>
     </header>
     <div ref="messagesContainer" class="chat-messages" role="log" aria-live="polite">
       <div v-for="message in chatMessages" :key="message.id" class="chat-message" :class="`chat-message--${message.role}`">
