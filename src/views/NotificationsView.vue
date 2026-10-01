@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { nextTick, onMounted, ref, watch } from 'vue'
 import { marked } from 'marked'
 import { finalizeNotification, getNotifications, updateNotificationRead, reportNotification } from '@/services/notificationService'
 import { getCurrentUser } from '@/services/authService'
+import { useNotificationCommands, type NotificationCommand, type NotificationCommandResult } from '@/composables/useNotificationCommands'
 import type { AppNotification } from '@/types'
 
 const currentUser = getCurrentUser()
@@ -15,6 +16,7 @@ const reportModalOpen = ref(false)
 const reportReason = ref('')
 const reportError = ref('')
 const reportSuccess = ref(false)
+const { pendingCommand, takePendingCommand } = useNotificationCommands()
 const defaultPetImage = 'https://images.unsplash.com/photo-1558788353-f76d92427f16?auto=format&fit=crop&w=320&q=80'
 
 function renderMarkdown(markdown: string): string {
@@ -116,6 +118,50 @@ async function submitReport() {
     reportError.value = 'Error al reportar la notificación. Intenta de nuevo.'
   }
 }
+
+function listNotificationsForAgent(): NotificationCommandResult {
+  return {
+    status: 'ok',
+    message: notifications.value.length ? `Hay ${notifications.value.length} notificaciones.` : 'No hay notificaciones.',
+    notifications: notifications.value.map((notification, index) => ({
+      position: index + 1,
+      title: notification.title,
+      sender: notification.senderName || 'Desconocido',
+      read: notification.read,
+    })),
+  }
+}
+
+async function runNotificationCommand(command: NotificationCommand): Promise<NotificationCommandResult> {
+  if (command.action === 'LIST') return error.value ? { status: 'error', message: error.value } : listNotificationsForAgent()
+
+  const index = (command.position ?? 0) - 1
+  const notification = notifications.value[index]
+  if (!notification) {
+    return { status: 'error', message: `No existe la notificación en la posición ${command.position ?? '(sin indicar)'}.` }
+  }
+
+  document.querySelectorAll('.notification-card')[index]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  error.value = ''
+  if (command.action === 'MARK_READ') await updateReadState(notification, true)
+  if (command.action === 'MARK_UNREAD') await updateReadState(notification, false)
+  if (command.action === 'FINALIZE') await saveInHistory(notification)
+  if (command.action === 'REPORT') {
+    if (notification.reported) return { status: 'error', message: 'Esa notificación ya fue reportada.' }
+    openReportModal(notification)
+    if (command.reason) reportReason.value = command.reason
+    return { status: 'ok', message: 'Formulario de reporte abierto; el usuario debe revisarlo y pulsar Enviar.' }
+  }
+  return error.value ? { status: 'error', message: error.value } : { status: 'ok', message: 'Acción realizada.' }
+}
+
+watch([pendingCommand, loading], async () => {
+  if (loading.value || !pendingCommand.value) return
+  const command = takePendingCommand()
+  if (!command) return
+  await nextTick()
+  command.resolve(await runNotificationCommand(command))
+}, { immediate: true })
 
 onMounted(async () => {
   try {

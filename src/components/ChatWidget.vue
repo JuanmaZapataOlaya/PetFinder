@@ -6,6 +6,27 @@ import { createRealtimeSession, executeAgentAction, sendAgentMessage, startAgent
 import Icon from '@/components/Icon.vue'
 import TutorialConfirmationModal from '@/components/TutorialConfirmationModal.vue'
 import { useTutorial } from '@/composables/useTutorial'
+import { useNotificationCommands, type NotificationCommandAction, type NotificationCommandResult } from '@/composables/useNotificationCommands'
+import {
+  SECTION_ANCHORS,
+  SECTION_ROUTES,
+  closeTopModal,
+  isAppSection,
+  scrollPage,
+  scrollToAnchor,
+  toPetType,
+  toTicketKind,
+  type ScrollDirection,
+} from '@/services/agentUiActions'
+
+interface AgentToolResult {
+  status: 'ok' | 'error'
+  message?: string
+  notifications?: NotificationCommandResult['notifications']
+}
+
+const NOTIFICATION_ACTIONS: NotificationCommandAction[] = ['LIST', 'MARK_READ', 'MARK_UNREAD', 'FINALIZE', 'REPORT']
+const SCROLL_DIRECTIONS: ScrollDirection[] = ['UP', 'DOWN', 'TOP', 'BOTTOM']
 
 interface ChatMessage {
   id: number
@@ -16,6 +37,7 @@ interface ChatMessage {
 
 const router = useRouter()
 const { isConfirmationVisible, runTutorial, acceptTutorial, closeTutorial } = useTutorial()
+const { requestNotificationCommand } = useNotificationCommands()
 const isChatOpen = ref(false)
 const draftMessage = ref('')
 const agentSessionId = ref<string | null>(null)
@@ -241,20 +263,26 @@ function handleRealtimeMessage(event: MessageEvent<string>) {
       } else if (rawArgs && typeof rawArgs === 'object') {
         parsedArgs = rawArgs as Record<string, unknown>
       }
-      if (name) {
-        handleAgentAction(name, parsedArgs)
-        if (typeof payload.call_id === 'string') {
-          sendRealtimeEvent({
-            type: 'conversation.item.create',
-            item: { type: 'function_call_output', call_id: payload.call_id, output: JSON.stringify({ status: 'ok' }) },
-          })
-          sendRealtimeEvent({ type: 'response.create' })
-        }
-      }
+      if (name) void respondToToolCall(name, parsedArgs, payload.call_id)
     }
   } catch {
     agentError.value = 'Se recibió un evento de voz inválido.'
   }
+}
+
+async function respondToToolCall(name: AgentAction, args: Record<string, unknown>, callId: unknown) {
+  let result: AgentToolResult
+  try {
+    result = await handleAgentAction(name, args)
+  } catch (error) {
+    result = { status: 'error', message: error instanceof Error ? error.message : 'No se pudo ejecutar la acción.' }
+  }
+  if (typeof callId !== 'string') return
+  sendRealtimeEvent({
+    type: 'conversation.item.create',
+    item: { type: 'function_call_output', call_id: callId, output: JSON.stringify(result) },
+  })
+  sendRealtimeEvent({ type: 'response.create' })
 }
 
 async function endRealtimeSession() {
@@ -397,7 +425,7 @@ async function sendMessage() {
     if (!agentSessionId.value) throw new Error('No hay una sesión activa del asistente.')
     const response = await sendAgentMessage(agentSessionId.value, content)
     addAssistantMessage(response.message)
-    handleAgentAction(response.action, response.payload)
+    void handleAgentAction(response.action, response.payload)
   } catch (error) {
     agentError.value = error instanceof Error ? error.message : 'No fue posible obtener una respuesta del asistente.'
   } finally {
@@ -405,32 +433,87 @@ async function sendMessage() {
   }
 }
 
-function handleAgentAction(action: AgentAction | null, payload: Record<string, unknown>) {
+async function handleAgentAction(action: AgentAction | null, payload: Record<string, unknown>): Promise<AgentToolResult> {
   const result = executeAgentAction({ action, payload })
-  if (!result) return
-  if (result.type === 'RUN_TUTORIAL') {
-    runTutorial()
-    return
+  if (!result) return { status: 'error', message: 'Acción no reconocida.' }
+  const params = result.params
+  const textParam = (key: string) => typeof params[key] === 'string' ? params[key] as string : ''
+
+  switch (result.type) {
+    case 'RUN_TUTORIAL':
+      runTutorial()
+      return { status: 'ok' }
+    case 'FIND_PET':
+      await router.push({
+        name: 'explore',
+        query: { q: textParam('query_description'), type: toPetType(params.kind), kind: toTicketKind(params.type) },
+      })
+      return { status: 'ok', message: 'Búsqueda aplicada con sus filtros.' }
+    case 'REPORT_PET':
+      await router.push({
+        name: 'summary',
+        query: {
+          action: 'create',
+          type: toPetType(params.kind),
+          kind: toTicketKind(params.type) ?? 'Perdida',
+          name: textParam('name'),
+          breed: textParam('breed'),
+          color: textParam('color'),
+          description: textParam('description'),
+        },
+      })
+      return { status: 'ok', message: 'Formulario de reporte abierto y prellenado.' }
+    case 'NAVIGATE':
+      return navigateToSection(params.section)
+    case 'SCROLL':
+      if (!SCROLL_DIRECTIONS.includes(params.direction as ScrollDirection)) return { status: 'error', message: 'Dirección no válida.' }
+      scrollPage(params.direction as ScrollDirection)
+      return { status: 'ok' }
+    case 'OPEN_MODAL':
+      if (params.modal === 'TUTORIAL') {
+        runTutorial()
+        return { status: 'ok' }
+      }
+      if (params.modal === 'REPORT_FORM') {
+        await router.push({ name: 'summary', query: { action: 'create' } })
+        return { status: 'ok' }
+      }
+      return { status: 'error', message: 'Ventana no reconocida.' }
+    case 'CLOSE_MODAL':
+      if (isConfirmationVisible.value) {
+        closeTutorial()
+        return { status: 'ok' }
+      }
+      return closeTopModal() ? { status: 'ok' } : { status: 'error', message: 'No hay ninguna ventana abierta.' }
+    case 'MANAGE_NOTIFICATION':
+      return manageNotification(params)
   }
-  if (result.type === 'FIND_PET') {
-    const query = typeof result.params.query_description === 'string' ? result.params.query_description : ''
-    void router.push({ name: 'explore', query: { q: query } })
-    return
+}
+
+async function navigateToSection(section: unknown): Promise<AgentToolResult> {
+  if (!isAppSection(section)) return { status: 'error', message: 'Sección no reconocida.' }
+  await router.push(SECTION_ROUTES[section])
+  const anchor = SECTION_ANCHORS[section]
+  if (anchor) {
+    await nextTick()
+    scrollToAnchor(anchor)
+  } else {
+    window.scrollTo({ top: 0 })
   }
-  const reportType = result.params.type === 'FOUND' ? 'Encontrada' : 'Perdida'
-  const reportKind = result.params.kind === 'CAT' ? 'Gato' : result.params.kind === 'OTHER' ? 'Otro' : 'Perro'
-  void router.push({
-    name: 'summary',
-    query: {
-      action: 'create',
-      type: reportKind,
-      kind: reportType,
-      name: typeof result.params.name === 'string' ? result.params.name : '',
-      breed: typeof result.params.breed === 'string' ? result.params.breed : '',
-      color: typeof result.params.color === 'string' ? result.params.color : '',
-      description: typeof result.params.description === 'string' ? result.params.description : '',
-    },
+  return { status: 'ok' }
+}
+
+async function manageNotification(params: Record<string, unknown>): Promise<AgentToolResult> {
+  const action = params.action as NotificationCommandAction
+  if (!NOTIFICATION_ACTIONS.includes(action)) return { status: 'error', message: 'Acción de notificación no válida.' }
+  // The command is queued before navigating so the view picks it up as soon as it loads.
+  const pendingResult = requestNotificationCommand({
+    action,
+    position: typeof params.position === 'number' ? params.position : undefined,
+    reason: typeof params.reason === 'string' ? params.reason : undefined,
   })
+  await router.push({ name: 'Notifications' })
+  return pendingResult
 }
 
 function addAssistantMessage(content: string) {

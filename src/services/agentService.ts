@@ -1,6 +1,14 @@
 import { supabase } from '@/services/supabase'
 
-export type AgentAction = 'FIND_PET' | 'REPORT_PET' | 'RUN_TUTORIAL'
+export type AgentAction =
+  | 'FIND_PET'
+  | 'REPORT_PET'
+  | 'RUN_TUTORIAL'
+  | 'NAVIGATE'
+  | 'SCROLL'
+  | 'OPEN_MODAL'
+  | 'CLOSE_MODAL'
+  | 'MANAGE_NOTIFICATION'
 
 export interface AgentResponse {
   message: string
