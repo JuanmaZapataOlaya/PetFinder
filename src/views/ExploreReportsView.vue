@@ -29,8 +29,8 @@ const searchResults = ref<PetTicket[]>([])
 const searchError = ref('')
 const searching = ref(false)
 const currentPage = ref(1)
-const kind = ref<'Todos' | TicketKind>('Todos')
-const type = ref<'Todas' | PetType>('Todas')
+const kind = ref<TicketKind | ''>('')
+const type = ref<PetType | ''>('')
 const filterKind = ref<'Todos' | TicketKind>('Todos')
 const filterType = ref<'Todas' | PetType>('Todas')
 const filterRadius = ref(500)
@@ -42,8 +42,8 @@ const showContactForm = ref(false)
 const currentUser = computed(() => getCurrentUser())
 
 const publicTickets = computed(() => searchResults.value.filter((ticket) =>
-  (kind.value === 'Todos' || ticket.kind === kind.value) &&
-  (type.value === 'Todas' || ticket.type === type.value)
+  (!kind.value || ticket.kind === kind.value) &&
+  (!type.value || ticket.type === type.value)
 ))
 
 const totalPages = computed(() => Math.max(1, Math.ceil(publicTickets.value.length / RESULTS_PER_PAGE)))
@@ -57,7 +57,10 @@ async function submitSearch(query: string) {
   searching.value = true
   searchError.value = ''
   try {
-    const results = await searchPets(query)
+    const results = await searchPets(query, {
+      type: type.value || undefined,
+      kind: kind.value || undefined,
+    })
     searchResults.value = results
   } catch (error) {
     searchError.value = error instanceof Error ? error.message : 'No fue posible realizar la búsqueda.'
@@ -68,6 +71,18 @@ async function submitSearch(query: string) {
 
 function handleSearchSubmit() {
   void submitSearch(search.value)
+}
+
+function applySearchFilters() {
+  void submitSearch(search.value.trim() || DEFAULT_SEARCH_QUERY)
+}
+
+function removeKindFilter() {
+  kind.value = ''
+}
+
+function removeTypeFilter() {
+  type.value = ''
 }
 
 function goToPreviousPage() {
@@ -81,6 +96,8 @@ function goToNextPage() {
 watch([searchResults, kind, type], () => {
   currentPage.value = 1
 })
+
+watch([kind, type], applySearchFilters)
 
 watch(() => route.query.q, (value) => {
   if (typeof value === 'string' && value.trim()) {
@@ -177,9 +194,19 @@ function formatDistance(meters: number): string {
       <form class="explore-toolbar" data-tutorial="explore-search" @submit.prevent="handleSearchSubmit">
         <div class="search-box"><Icon name="search" :size="16" /><input v-model="search" type="search" placeholder="Buscar por nombre, zona o raza" aria-label="Buscar reportes públicos" /></div>
         <button class="primary-button search-submit" type="submit" :disabled="searching"><Icon name="search" :size="15" />{{ searching ? 'Buscando...' : 'Buscar' }}</button>
-        <select v-model="kind" aria-label="Filtrar reportes por tipo"><option>Todos</option><option>Perdida</option><option>Encontrada</option></select>
-        <select v-model="type" aria-label="Filtrar reportes por especie"><option>Todas</option><option>Perro</option><option>Gato</option><option>Ave</option><option>Otro</option></select>
+        <select v-model="kind" aria-label="Filtrar reportes por tipo"><option value="">Todos los tipos</option><option value="Perdida">Perdida</option><option value="Encontrada">Encontrada</option></select>
+        <select v-model="type" aria-label="Filtrar reportes por especie"><option value="">Todas las especies</option><option value="Perro">Perro</option><option value="Gato">Gato</option><option value="Ave">Ave</option><option value="Otro">Otro</option></select>
       </form>
+      <div v-if="kind || type" class="active-filters" aria-label="Filtros activos">
+        <span v-if="kind" class="filter-chip">
+          <span>Tipo: {{ kind }}</span>
+          <button class="filter-chip-remove" type="button" aria-label="Eliminar filtro de tipo" title="Eliminar filtro" @click="removeKindFilter"><Icon name="x" :size="13" /></button>
+        </span>
+        <span v-if="type" class="filter-chip">
+          <span>Especie: {{ type }}</span>
+          <button class="filter-chip-remove" type="button" aria-label="Eliminar filtro de especie" title="Eliminar filtro" @click="removeTypeFilter"><Icon name="x" :size="13" /></button>
+        </span>
+      </div>
       <p v-if="searchError" class="search-error" role="alert">{{ searchError }}</p>
       <div class="explore-layout">
         <div class="public-report-grid">
@@ -249,6 +276,10 @@ function formatDistance(meters: number): string {
       <div class="detail-summary"><span>{{ selectedTicket.type }} · {{ selectedTicket.breed || 'Raza no especificada' }}</span><strong>{{ selectedTicket.color || 'Color no especificado' }}</strong><small>{{ selectedTicket.note }}</small></div>
       <div class="owner-contact"><h3>Información del Propietario</h3><div v-if="ownerContactInfo"><p><strong>Nombre:</strong> {{ ownerContactInfo.fullName || 'No especificado' }}</p><p><strong>Teléfono:</strong> {{ ownerContactInfo.phoneNumber || 'No especificado' }}</p><p><strong>Email:</strong> {{ ownerContactInfo.email || 'No especificado' }}</p></div><p v-else class="owner-contact-empty">No se encuentra información de contacto disponible.</p>
         <div v-if="selectedTicket.ownerId !== currentUser?.id" class="contact-actions">
+          <p class="proof-notice">
+            <template v-if="selectedTicket.kind === 'Perdida'">Esta mascota está reportada como perdida. Para contactar al propietario, debes subir imágenes que demuestren que tienes a la mascota.</template>
+            <template v-else>Esta mascota está reportada como encontrada. Para contactar a quien la encontró, debes subir imágenes que demuestren que eres el dueño de la mascota.</template>
+          </p>
           <button v-if="!showContactForm" class="primary-button" @click="showContactForm = true">Contactar al propietario</button>
           <ContactRequestForm
             v-if="showContactForm"
@@ -266,6 +297,11 @@ function formatDistance(meters: number): string {
 .explore-layout, .public-report-grid, .match-grid { min-width: 0; }
 .explore-toolbar { grid-template-columns: minmax(220px, 1fr) auto 150px 150px; }
 .explore-toolbar .search-submit:disabled { opacity: .6; cursor: wait; }
+.active-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: -8px 0 20px; }
+.filter-chip { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; border: 1px solid #b9d0ae; border-radius: 999px; padding: 4px 6px 4px 11px; background: #f2f8ef; color: #42623a; font-size: 12px; font-weight: 700; }
+.filter-chip-remove { display: inline-flex; width: 20px; height: 20px; align-items: center; justify-content: center; border: 0; border-radius: 50%; padding: 0; background: transparent; color: #42623a; opacity: 0; cursor: pointer; transition: opacity .15s ease, background-color .15s ease; }
+.filter-chip:hover .filter-chip-remove, .filter-chip-remove:focus-visible { opacity: 1; }
+.filter-chip-remove:hover { background: #dbead5; }
 .search-error { margin: -14px 0 20px; color: #b5533e; font-size: 12px; }
 .search-help { grid-column: 1 / -1; margin: 18px 0 0; color: #758178; font-size: 13px; text-align: center; }
 .pagination { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 6px; }
@@ -285,6 +321,7 @@ function formatDistance(meters: number): string {
 .owner-contact p { margin: 0; font-size: .9rem; }
 .owner-contact-empty { color: #666; font-style: italic; }
 .contact-actions { margin-top: 1rem; }
+.proof-notice { margin-bottom: .75rem !important; color: #42623a; font-size: .85rem !important; font-weight: 600; }
 @media (max-width: 950px) {
   .explore-layout { grid-template-columns: 1fr; }
   .explore-map-panel { padding-left: 0; }

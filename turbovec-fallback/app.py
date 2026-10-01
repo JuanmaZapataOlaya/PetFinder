@@ -3,7 +3,7 @@ import json
 import os
 from pathlib import Path
 from threading import RLock
-from typing import Any
+from typing import Any, Literal
 from urllib.request import Request, urlopen
 
 import numpy as np
@@ -48,6 +48,8 @@ class SearchRequest(BaseModel):
     vector: list[float] | None = None
     query: str | None = None
     limit: int = Field(default=10, ge=1, le=100)
+    type: Literal["Perro", "Gato", "Ave", "Otro"] | None = None
+    kind: Literal["Perdida", "Encontrada"] | None = None
 
     @field_validator("vector")
     @classmethod
@@ -123,16 +125,30 @@ class VectorStore:
             self._persist()
             return len(ids) - len(existing_ids), len(existing_ids)
 
-    def search(self, vector: list[float], limit: int) -> list[dict[str, Any]]:
+    def search(
+        self,
+        vector: list[float],
+        limit: int,
+        *,
+        type_filter: str | None = None,
+        kind_filter: str | None = None,
+    ) -> list[dict[str, Any]]:
         with self._lock:
             if not self._ids:
                 return []
             query = np.asarray([vector], dtype=np.float32)
-            scores, ids = self._index.search(query, k=min(limit, len(self._ids)))
-            return [
-                {"id": int(item_id), "score": float(score), "record": self._metadata.get(int(item_id))}
-                for score, item_id in zip(scores[0], ids[0])
-            ]
+            scores, ids = self._index.search(query, k=len(self._ids))
+            results = []
+            for score, item_id in zip(scores[0], ids[0]):
+                record = self._metadata.get(int(item_id))
+                if type_filter is not None and (record is None or record.get("type") != type_filter):
+                    continue
+                if kind_filter is not None and (record is None or record.get("kind") != kind_filter):
+                    continue
+                results.append({"id": int(item_id), "score": float(score), "record": record})
+                if len(results) == limit:
+                    break
+            return results
 
     def _persist(self) -> None:
         if INDEX_PATH.exists():
@@ -218,4 +234,11 @@ def add_vectors(payload: AddRequest, x_turbovec_token: str | None = Header(defau
 @app.post("/search")
 def search_vectors(payload: SearchRequest, x_turbovec_token: str | None = Header(default=None)) -> dict[str, Any]:
     vector = payload.vector or create_embedding(payload.query or "")
-    return {"results": store.search(vector, payload.limit)}
+    return {
+        "results": store.search(
+            vector,
+            payload.limit,
+            type_filter=payload.type,
+            kind_filter=payload.kind,
+        )
+    }

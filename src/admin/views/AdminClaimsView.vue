@@ -174,7 +174,7 @@ const ticketStatusOption = computed(() => ({
 }))
 const claimStatusOption = computed(() => ({
   tooltip: { trigger: 'item' }, legend: { bottom: 0 }, color: chartColor,
-  series: [{ type: 'pie', radius: ['40%', '68%'], data: (query.data.value?.claimStatus ?? []).map((row) => ({ name: row.label, value: row.total })) }],
+  series: [{ type: 'pie', radius: ['40%', '68%'], data: (dashboard.value?.claimStatus ?? []).map((row) => ({ name: row.label, value: row.total })) }],
 }))
 
 // Gráfico de Notificaciones configurado para desglose por lectura y finalizado

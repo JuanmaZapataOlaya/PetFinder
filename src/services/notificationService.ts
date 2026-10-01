@@ -180,8 +180,6 @@ export async function sendContactRequest(payload: Omit<AppNotification, 'id' | '
     evidence_images: payload.evidenceImages,
   }).select().single()
   if (error) return { success: false, error: error.message }
-  const audit = await supabase.from('audit_logs').insert({ action: 'CONTACT_REQUEST_SENT', data: data })
-  if (audit.error) return { success: false, error: audit.error.message }
 
   const { error: agentError } = await supabase.functions.invoke('validate-claim-agent', {
     body: {

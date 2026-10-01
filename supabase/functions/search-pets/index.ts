@@ -24,7 +24,7 @@ Deno.serve(async (request) => {
     return jsonResponse({ error: 'El servidor no está configurado correctamente.' }, 500);
   }
 
-  let payload: { query?: unknown; limit?: unknown };
+  let payload: { query?: unknown; limit?: unknown; type?: unknown; kind?: unknown };
   try {
     payload = await request.json();
   } catch {
@@ -35,6 +35,14 @@ Deno.serve(async (request) => {
   const limit = typeof payload.limit === 'number' && Number.isInteger(payload.limit)
     ? Math.min(Math.max(payload.limit, 1), 100)
     : 50;
+  const validTypes = ['Perro', 'Gato', 'Ave', 'Otro'];
+  const validKinds = ['Perdida', 'Encontrada'];
+  const type = payload.type === undefined || payload.type === null || payload.type === ''
+    ? null
+    : validTypes.includes(String(payload.type)) ? String(payload.type) : null;
+  const kind = payload.kind === undefined || payload.kind === null || payload.kind === ''
+    ? null
+    : validKinds.includes(String(payload.kind)) ? String(payload.kind) : null;
 
   if (!query) {
     const supabase = createClient(supabaseUrl, supabaseSecretKey);
@@ -42,6 +50,8 @@ Deno.serve(async (request) => {
       search_query: null,
       query_embedding: null,
       result_limit: limit,
+      filter_type: type,
+      filter_kind: kind,
     });
     if (error) {
       console.error('[search-pets] Error en RPC sin búsqueda:', error);
@@ -84,6 +94,8 @@ Deno.serve(async (request) => {
       search_query: query,
       query_embedding: embedding,
       result_limit: limit,
+      filter_type: type,
+      filter_kind: kind,
     });
 
     if (error) {

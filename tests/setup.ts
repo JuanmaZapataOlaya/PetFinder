@@ -8,6 +8,6 @@ config.global.stubs = {
 }
 
 afterEach(() => {
-  localStorage.clear()
+  if (typeof localStorage !== 'undefined') localStorage.clear()
   vi.restoreAllMocks()
 })

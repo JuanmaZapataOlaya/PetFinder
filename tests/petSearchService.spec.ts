@@ -38,4 +38,22 @@ describe('petSearchService guardrails', () => {
     await searchPets('perro golden retriever')
     expect(invokeMock).toHaveBeenCalledOnce()
   })
+
+  it('envía los filtros de tipo y clase al endpoint', async () => {
+    const { supabase } = await import('@/services/supabase')
+    const invokeMock = vi.mocked(supabase.functions.invoke)
+    invokeMock.mockClear()
+    const { searchPets } = await import('@/services/petSearchService')
+
+    await searchPets('perro', { type: 'Perro', kind: 'Perdida' })
+
+    expect(invokeMock).toHaveBeenCalledWith('search-pets', {
+      body: {
+        query: 'perro',
+        limit: 50,
+        type: 'Perro',
+        kind: 'Perdida',
+      },
+    })
+  })
 })

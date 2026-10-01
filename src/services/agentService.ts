@@ -10,6 +10,13 @@ export interface AgentResponse {
   correlation_id: string
 }
 
+export interface RealtimeSession {
+  session_id: string
+  model: string
+  ws_url: string
+  expires_in: number
+}
+
 export interface AgentActionResult {
   type: AgentAction
   params: Record<string, unknown>
@@ -30,6 +37,15 @@ export async function sendAgentMessage(sessionId: string, message: string): Prom
   })
   if (error) throw error
   if (!data?.message) throw new Error('El asistente no devolvió una respuesta válida.')
+  return data
+}
+
+export async function createRealtimeSession(sessionId: string): Promise<RealtimeSession> {
+  const { data, error } = await supabase.functions.invoke<RealtimeSession>('agent-gateway', {
+    body: { session_id: sessionId, operation: 'realtime_session' },
+  })
+  if (error) throw error
+  if (!data?.session_id || !data.ws_url) throw new Error('No fue posible iniciar la sesión de voz.')
   return data
 }
 
