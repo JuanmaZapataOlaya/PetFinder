@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { usePetLabels } from '@/composables/usePetLabels'
 import GoogleMapPicker from '@/components/GoogleMapPicker.vue'
 import ContactRequestForm from '@/components/ContactRequestForm.vue'
 import { tickets } from '@/data/tickets'
@@ -7,13 +9,15 @@ import { getCurrentUser } from '@/services/authService'
 import { getContactInfo } from '@/services/contactService'
 import type { PetTicket, PetType, TicketKind } from '@/types'
 
-const RADIUS_OPTIONS = [
-  { label: 'Cualquier distancia', value: 0 },
+const { t } = useI18n()
+const { reportKind, petType } = usePetLabels()
+const RADIUS_OPTIONS = computed(() => [
+  { label: t('explore.anyDistance'), value: 0 },
   { label: '500 m', value: 500 },
   { label: '1 km', value: 1000 },
   { label: '3 km', value: 3000 },
   { label: '5 km', value: 5000 },
-]
+])
 
 const filterKind = ref<'Todos' | TicketKind>('Todos')
 const filterType = ref<'Todas' | PetType>('Todas')
@@ -110,34 +114,34 @@ function formatDistance(meters: number): string {
 
 <template>
   <section class="page-view">
-    <div class="eyebrow">Motor de coincidencias</div>
-    <h1>Coincidencias</h1>
-    <p class="page-intro">Reportes de otros usuarios que podrían estar relacionados con tu mascota.</p>
+    <div class="eyebrow">{{ t('explore.matchesEngine') }}</div>
+    <h1>{{ t('explore.matchesTitle') }}</h1>
+    <p class="page-intro">{{ t('explore.matchesIntro') }}</p>
 
     <div class="explore-toolbar">
-      <select v-model="filterKind" aria-label="Filtrar por tipo de reporte">
-        <option value="Todos">Todos los tipos</option>
-        <option value="Perdida">Perdida</option>
-        <option value="Encontrada">Encontrada</option>
+      <select v-model="filterKind" :aria-label="t('explore.filterMatchesKind')">
+        <option value="Todos">{{ t('common.allTypes') }}</option>
+        <option value="Perdida">{{ t('common.lost') }}</option>
+        <option value="Encontrada">{{ t('common.found') }}</option>
       </select>
-      <select v-model="filterType" aria-label="Filtrar por especie">
-        <option value="Todas">Todas las especies</option>
-        <option value="Perro">Perro</option>
-        <option value="Gato">Gato</option>
-        <option value="Ave">Ave</option>
-        <option value="Otro">Otro</option>
+      <select v-model="filterType" :aria-label="t('explore.filterMatchesSpecies')">
+        <option value="Todas">{{ t('common.allSpecies') }}</option>
+        <option value="Perro">{{ t('common.dog') }}</option>
+        <option value="Gato">{{ t('common.cat') }}</option>
+        <option value="Ave">{{ t('common.bird') }}</option>
+        <option value="Otro">{{ t('common.other') }}</option>
       </select>
-      <select v-model.number="filterRadius" aria-label="Filtrar por distancia">
+      <select v-model.number="filterRadius" :aria-label="t('explore.filterDistance')">
         <option v-for="opt in RADIUS_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
       </select>
     </div>
 
     <div class="matches-map-section">
       <div class="section-head">
-        <h2>Ubicación de referencia</h2>
-        <span>{{ matchedReports.length }} resultado{{ matchedReports.length !== 1 ? 's' : '' }}</span>
+        <h2>{{ t('explore.referenceLocation') }}</h2>
+        <span>{{ t('explore.resultCount', matchedReports.length) }}</span>
       </div>
-      <p class="map-hint">Arrastra el marcador para cambiar el centro de búsqueda.</p>
+      <p class="map-hint">{{ t('explore.mapHint') }}</p>
       <GoogleMapPicker
         :latitude="refLat"
         :longitude="refLng"
@@ -153,15 +157,15 @@ function formatDistance(meters: number): string {
       <article v-for="{ ticket, distanceM } in reportsWithDistance" :key="ticket.id" class="match-feature">
         <img :src="ticket.image" :alt="ticket.name" />
         <div>
-          <span class="match-score">{{ ticket.kind }} · {{ ticket.type }}</span>
+          <span class="match-score">{{ reportKind(ticket.kind) }} · {{ petType(ticket.type) }}</span>
           <h2>{{ ticket.name }}</h2>
-          <p>{{ ticket.location }} · {{ ticket.breed || 'Raza no especificada' }}</p>
-          <small v-if="distanceM !== null" class="match-distance">{{ formatDistance(distanceM) }} de distancia</small>
-          <button class="secondary-button" @click="selectedTicket = ticket">Ver detalle</button>
+          <p>{{ ticket.location }} · {{ ticket.breed || t('common.noBreed') }}</p>
+          <small v-if="distanceM !== null" class="match-distance">{{ formatDistance(distanceM) }} {{ t('common.distance') }}</small>
+          <button class="secondary-button" @click="selectedTicket = ticket">{{ t('explore.viewDetails') }}</button>
         </div>
       </article>
       <div v-if="!matchedReports.length" class="empty-state">
-        No hay coincidencias con los filtros seleccionados.
+        {{ t('explore.noMatches') }}
       </div>
     </div>
   </section>
@@ -170,9 +174,9 @@ function formatDistance(meters: number): string {
       <div class="modal-head">
         <div>
           <h2>{{ selectedTicket.name }}</h2>
-          <p class="modal-intro">{{ selectedTicket.kind }} · {{ selectedTicket.location }}</p>
+          <p class="modal-intro">{{ reportKind(selectedTicket.kind) }} · {{ selectedTicket.location }}</p>
         </div>
-        <button class="close-button" aria-label="Cerrar" @click="selectedTicket = null">✕</button>
+        <button class="close-button" :aria-label="t('common.close')" @click="selectedTicket = null">✕</button>
       </div>
       <GoogleMapPicker
         :latitude="selectedTicket.latitude"
@@ -183,22 +187,22 @@ function formatDistance(meters: number): string {
         height="360px"
       />
       <div class="detail-summary">
-        <span>{{ selectedTicket.type }} · {{ selectedTicket.breed || 'Raza no especificada' }}</span>
-        <strong>{{ selectedTicket.color || 'Color no especificado' }}</strong>
+        <span>{{ petType(selectedTicket.type) }} · {{ selectedTicket.breed || t('common.noBreed') }}</span>
+        <strong>{{ selectedTicket.color || t('common.noColor') }}</strong>
         <small>{{ selectedTicket.note }}</small>
       </div>
       <div class="owner-contact">
-        <h3>Información del Propietario</h3>
+        <h3>{{ t('common.ownerInformation') }}</h3>
         <div v-if="ownerContactInfo">
-          <p><strong>Nombre:</strong> {{ ownerContactInfo.fullName || 'No especificado' }}</p>
-          <p><strong>Teléfono:</strong> {{ ownerContactInfo.phoneNumber || 'No especificado' }}</p>
-          <p><strong>Email:</strong> {{ ownerContactInfo.email || 'No especificado' }}</p>
+          <p><strong>{{ t('common.name') }}:</strong> {{ ownerContactInfo.fullName || t('common.notSpecified') }}</p>
+          <p><strong>{{ t('common.phone') }}:</strong> {{ ownerContactInfo.phoneNumber || t('common.notSpecified') }}</p>
+          <p><strong>{{ t('common.email') }}:</strong> {{ ownerContactInfo.email || t('common.notSpecified') }}</p>
         </div>
-        <p v-else class="owner-contact-empty">No se encuentra información de contacto disponible.</p>
+        <p v-else class="owner-contact-empty">{{ t('common.noContactInfo') }}</p>
 
         <div v-if="selectedTicket.ownerId !== currentUser?.id" class="contact-actions">
           <button v-if="!showContactForm" class="primary-button" @click="showContactForm = true">
-            Contactar al propietario
+            {{ t('explore.contactOwner') }}
           </button>
           <ContactRequestForm
             v-if="showContactForm"

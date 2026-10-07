@@ -1,15 +1,19 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { usePetLabels } from '@/composables/usePetLabels'
 import { getPetHistory } from '@/services/notificationService'
 import type { PetHistoryRecord } from '@/types'
 
+const { t, locale } = useI18n()
+const { petType, reportKind, reportStatus } = usePetLabels()
 const history = ref<PetHistoryRecord[]>([])
 const loading = ref(true)
 const error = ref('')
 const defaultPetImage = 'https://images.unsplash.com/photo-1558788353-f76d92427f16?auto=format&fit=crop&w=640&q=80'
 
 function formatDate(timestamp: number): string {
-  return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' }).format(new Date(timestamp))
+  return new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium' }).format(new Date(timestamp))
 }
 
 function handleImageError(event: Event) {
@@ -21,7 +25,7 @@ onMounted(async () => {
   try {
     history.value = await getPetHistory()
   } catch {
-    error.value = 'No se pudo cargar el historial de mascotas.'
+    error.value = t('petHistory.loadError')
   } finally {
     loading.value = false
   }
@@ -31,44 +35,44 @@ onMounted(async () => {
 <template>
   <section class="page-view pet-history-view">
     <header class="history-heading" data-tutorial="pet-history">
-      <div class="eyebrow">Casos finalizados</div>
-      <h1>Historial de mascotas</h1>
-      <p class="page-intro">Consulta la actividad y el historial de las mascotas reclamadas por la comunidad a través de la app.</p>
+      <div class="eyebrow">{{ t('petHistory.eyebrow') }}</div>
+      <h1>{{ t('petHistory.title') }}</h1>
+      <p class="page-intro">{{ t('petHistory.intro') }}</p>
     </header>
 
     <div v-if="loading" class="history-state" aria-live="polite">
-      <span class="loading-spinner" aria-hidden="true" /> Cargando historial...
+      <span class="loading-spinner" aria-hidden="true" /> {{ t('petHistory.loading') }}
     </div>
     <div v-else-if="error" class="history-state history-error" role="alert">{{ error }}</div>
-    <div v-else-if="!history.length" class="history-state">Todavía no tienes reportes finalizados.</div>
+    <div v-else-if="!history.length" class="history-state">{{ t('petHistory.empty') }}</div>
 
     <div v-else class="history-list">
       <article v-for="record in history" :key="record.id" class="history-card">
-        <img class="history-card__image" :src="record.pet.image || defaultPetImage" :alt="`Foto de ${record.pet.name}`" @error="handleImageError" />
+        <img class="history-card__image" :src="record.pet.image || defaultPetImage" :alt="t('common.reportPhotoAlt', { name: record.pet.name })" @error="handleImageError" />
         <div class="history-card__body">
           <div class="history-card__heading">
             <div>
               <h2>{{ record.pet.name }}</h2>
-              <span class="history-status">Finalizado</span>
+              <span class="history-status">{{ t('petHistory.finished') }}</span>
             </div>
-            <span class="history-report">Reporte #{{ record.reportId }}</span>
+            <span class="history-report">{{ t('common.report') }} #{{ record.reportId }}</span>
           </div>
 
           <dl class="history-details">
-            <div><dt>Especie</dt><dd>{{ record.pet.type }}</dd></div>
-            <div><dt>Raza</dt><dd>{{ record.pet.breed || 'No especificada' }}</dd></div>
-            <div><dt>Color</dt><dd>{{ record.pet.color || 'No especificado' }}</dd></div>
-            <div><dt>Fecha del reporte</dt><dd>{{ record.pet.date }}</dd></div>
-            <div><dt>Última ubicación</dt><dd>{{ record.pet.location }}</dd></div>
-            <div><dt>Estado del reporte</dt><dd>{{ record.pet.kind }} · {{ record.pet.status }}</dd></div>
+            <div><dt>{{ t('common.species') }}</dt><dd>{{ petType(record.pet.type) }}</dd></div>
+            <div><dt>{{ t('common.breed') }}</dt><dd>{{ record.pet.breed || t('common.notSpecifiedFeminine') }}</dd></div>
+            <div><dt>{{ t('common.color') }}</dt><dd>{{ record.pet.color || t('common.notSpecified') }}</dd></div>
+            <div><dt>{{ t('petHistory.reportDate') }}</dt><dd>{{ record.pet.date }}</dd></div>
+            <div><dt>{{ t('petHistory.lastLocation') }}</dt><dd>{{ record.pet.location }}</dd></div>
+            <div><dt>{{ t('petHistory.reportStatus') }}</dt><dd>{{ reportKind(record.pet.kind) }} · {{ reportStatus(record.pet.status) }}</dd></div>
           </dl>
 
-          <p class="history-description">{{ record.pet.note || 'Sin descripción disponible.' }}</p>
+          <p class="history-description">{{ record.pet.note || t('common.noDescription') }}</p>
           <div class="history-users">
-            <span><strong>Usuario reportante:</strong> {{ record.reporterName }}</span>
-            <span><strong>Usuario receptor:</strong> {{ record.recipientName }}</span>
+            <span><strong>{{ t('petHistory.reporter') }}:</strong> {{ record.reporterName }}</span>
+            <span><strong>{{ t('petHistory.recipient') }}:</strong> {{ record.recipientName }}</span>
           </div>
-          <small class="history-finished">Caso finalizado el {{ formatDate(record.finalizedAt) }}</small>
+          <small class="history-finished">{{ t('petHistory.finishedOn') }} {{ formatDate(record.finalizedAt) }}</small>
         </div>
       </article>
     </div>

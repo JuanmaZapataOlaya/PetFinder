@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import VChart from 'vue-echarts'
 import '@/admin/charts/echarts'
 import type { AppNotification } from '@/types'
@@ -46,6 +47,7 @@ interface ClaimsData {
 }
 
 const period = ref(30)
+const { t, locale } = useI18n()
 const range = computed(() => ({
   p_from: new Date(Date.now() - period.value * 86400000).toISOString(),
   p_to: new Date().toISOString(),
@@ -78,7 +80,7 @@ async function loadReportedNotifications() {
     notifications.value = await getFullNotifications()
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    claimsError.value = `No se pudieron cargar las notificaciones reportadas: ${message}`
+    claimsError.value = `${t('admin.notificationLoadError')}: ${message}`
     console.error('Error completo:', err)
   } finally {
     claimsLoading.value = false
@@ -87,7 +89,7 @@ async function loadReportedNotifications() {
 
 function formatDate(timestamp: number | string): string {
   const date = typeof timestamp === 'number' ? new Date(timestamp) : new Date(timestamp)
-  return new Intl.DateTimeFormat('es-CO', {
+  return new Intl.DateTimeFormat(locale.value, {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(date)
@@ -115,7 +117,7 @@ function breakdownOption(title: string, rows: GroupRow[]) {
 
 // 1. Función para extraer solo "Ciudad, Departamento"
 function getCityAndDepartment(location: string): string {
-  if (!location) return 'Desconocida'
+  if (!location) return t('admin.unknownLocation')
   const parts = location.split(',').map((p) => p.trim())
   
   if (parts.length <= 2) return location
@@ -160,8 +162,8 @@ const timelineOption = computed(() => {
     yAxis: { type: 'value', minInterval: 1 },
     dataZoom: [{ type: 'inside' }, { type: 'slider', bottom: 24, height: 16 }],
     series: kinds.flatMap((kind) => [
-      { name: `${kind} creados`, type: 'line', smooth: true, data: dates.map((date) => rows.find((row) => row.bucket === date && row.kind === kind)?.created ?? 0) },
-      { name: `${kind} resueltos`, type: 'line', smooth: true, lineStyle: { type: 'dashed' }, data: dates.map((date) => rows.find((row) => row.bucket === date && row.kind === kind)?.resolved ?? 0) },
+      { name: `${kind} ${t('admin.created')}`, type: 'line', smooth: true, data: dates.map((date) => rows.find((row) => row.bucket === date && row.kind === kind)?.created ?? 0) },
+      { name: `${kind} ${t('admin.resolved')}`, type: 'line', smooth: true, lineStyle: { type: 'dashed' }, data: dates.map((date) => rows.find((row) => row.bucket === date && row.kind === kind)?.resolved ?? 0) },
     ]),
   }
 })
@@ -193,68 +195,68 @@ const readsOption = computed(() => ({
 <template>
   <section class="page-view admin-page section-dashboard">
     <header class="section-heading">
-      <div><div class="eyebrow">Panel de administración</div><h1>Tickets y reclamos</h1><p>Actividad, estado, ubicación y características de los reportes de mascotas.</p></div>
-      <label>Periodo
+      <div><div class="eyebrow">{{ t('admin.panel') }}</div><h1>{{ t('admin.ticketClaims') }}</h1><p>{{ t('admin.ticketClaimsIntro') }}</p></div>
+      <label>{{ t('admin.period') }}
         <select v-model.number="period" :disabled="loading" @change="reload">
-          <option :value="7">7 días</option><option :value="30">30 días</option><option :value="90">90 días</option>
+          <option :value="7">{{ t('admin.days7') }}</option><option :value="30">{{ t('admin.days30') }}</option><option :value="90">{{ t('admin.days90') }}</option>
         </select>
       </label>
     </header>
-    <div v-if="loading" class="section-state">Cargando reclamos y reportes…</div>
-    <div v-else-if="error" class="section-state error-state" role="alert">{{ error }} <button @click="reload">Reintentar</button></div>
+    <div v-if="loading" class="section-state">{{ t('admin.loadingClaims') }}</div>
+    <div v-else-if="error" class="section-state error-state" role="alert">{{ error }} <button @click="reload">{{ t('common.retry') }}</button></div>
     <template v-else-if="dashboard">
       <div class="admin-kpi-grid claims-kpis">
-        <article class="admin-kpi-card"><div class="admin-kpi-label">Tickets creados</div><strong>{{ dashboard.totals.tickets }}</strong><p>En el periodo</p></article>
-        <article class="admin-kpi-card"><div class="admin-kpi-label">Reclamos recibidos</div><strong>{{ dashboard.totals.claims }}</strong><p>En el periodo</p></article>
-        <article class="admin-kpi-card"><div class="admin-kpi-label">Reclamos pendientes</div><strong>{{ dashboard.totals.openClaims }}</strong><p>Estado actual</p></article>
+        <article class="admin-kpi-card"><div class="admin-kpi-label">{{ t('admin.ticketsCreated') }}</div><strong>{{ dashboard.totals.tickets }}</strong><p>{{ t('admin.period') }}</p></article>
+        <article class="admin-kpi-card"><div class="admin-kpi-label">{{ t('admin.claimsReceived') }}</div><strong>{{ dashboard.totals.claims }}</strong><p>{{ t('admin.period') }}</p></article>
+        <article class="admin-kpi-card"><div class="admin-kpi-label">{{ t('admin.claimsPending') }}</div><strong>{{ dashboard.totals.openClaims }}</strong><p>{{ t('admin.currentStatus') }}</p></article>
         <article class="admin-kpi-card">
-          <div class="admin-kpi-label">Notificaciones en el periodo</div>
+          <div class="admin-kpi-label">{{ t('admin.notificationsPeriod') }}</div>
           <strong>{{ dashboard.totals.notificationsRead }} / {{ dashboard.totals.notificationsRead + dashboard.totals.notificationsUnread }}</strong>
-          <p>{{ dashboard.totals.notificationsFinalized }} finalizadas · {{ dashboard.totals.notificationsPending }} pendientes</p>
+          <p>{{ dashboard.totals.notificationsFinalized }} {{ t('notifications.finalized') }} · {{ dashboard.totals.notificationsPending }} {{ t('admin.pending') }}</p>
         </article>
       </div>
       <div class="section-chart-grid">
-        <article class="admin-chart-card chart-wide"><header><div><h2>Tickets creados y resueltos</h2><p>Evolución diaria según tipo de reporte</p></div></header><VChart v-if="dashboard.ticketTimeline.length" class="admin-chart" :option="timelineOption" autoresize /><div v-else class="admin-chart-message">Sin actividad en este periodo.</div></article>
-        <article class="admin-chart-card"><header><div><h2>Estado de tickets</h2><p>Abiertos y resueltos actualmente</p></div></header><VChart v-if="dashboard.ticketStatus.length" class="admin-chart" :option="ticketStatusOption" autoresize /><div v-else class="admin-chart-message">Sin tickets registrados.</div></article>
-        <article class="admin-chart-card"><header><div><h2>Reportes por ubicación</h2><p>Mascotas perdidas y encontradas</p></div></header><VChart v-if="groupedLocationStats.length" class="admin-chart" :option="breakdownOption('Tickets', groupedLocationStats)" autoresize /><div v-else class="admin-chart-message">Sin ubicaciones registradas.</div></article>
-        <article class="admin-chart-card"><header><div><h2>Reportes por especie</h2><p>Comparación entre perdidas y encontradas</p></div></header><VChart v-if="dashboard.speciesStats.length" class="admin-chart" :option="breakdownOption('Tickets', dashboard.speciesStats)" autoresize /><div v-else class="admin-chart-message">Sin datos de especies.</div></article>
-        <article class="admin-chart-card"><header><div><h2>Reportes por raza</h2><p>Principales razas del periodo</p></div></header><VChart v-if="dashboard.breedStats.length" class="admin-chart" :option="breakdownOption('Tickets', dashboard.breedStats)" autoresize /><div v-else class="admin-chart-message">Sin datos de razas.</div></article>
-        <article class="admin-chart-card"><header><div><h2>Estado de notificaciones</h2><p>Estado de lectura y finalización</p></div></header><VChart v-if="dashboard.notificationReads.length" class="admin-chart" :option="readsOption" autoresize /><div v-else class="admin-chart-message">Sin notificaciones en este periodo.</div></article>
+        <article class="admin-chart-card chart-wide"><header><div><h2>{{ t('admin.ticketsResolved') }}</h2><p>{{ t('admin.dailyByType') }}</p></div></header><VChart v-if="dashboard.ticketTimeline.length" class="admin-chart" :option="timelineOption" autoresize /><div v-else class="admin-chart-message">{{ t('admin.noActivity') }}</div></article>
+        <article class="admin-chart-card"><header><div><h2>{{ t('admin.ticketStatus') }}</h2><p>{{ t('admin.openResolved') }}</p></div></header><VChart v-if="dashboard.ticketStatus.length" class="admin-chart" :option="ticketStatusOption" autoresize /><div v-else class="admin-chart-message">{{ t('admin.noTickets') }}</div></article>
+        <article class="admin-chart-card"><header><div><h2>{{ t('admin.reportsByLocation') }}</h2><p>{{ t('admin.lostFound') }}</p></div></header><VChart v-if="groupedLocationStats.length" class="admin-chart" :option="breakdownOption(t('admin.tickets'), groupedLocationStats)" autoresize /><div v-else class="admin-chart-message">{{ t('admin.noLocations') }}</div></article>
+        <article class="admin-chart-card"><header><div><h2>{{ t('admin.reportsBySpecies') }}</h2><p>{{ t('admin.lostFoundComparison') }}</p></div></header><VChart v-if="dashboard.speciesStats.length" class="admin-chart" :option="breakdownOption(t('admin.tickets'), dashboard.speciesStats)" autoresize /><div v-else class="admin-chart-message">{{ t('admin.noSpecies') }}</div></article>
+        <article class="admin-chart-card"><header><div><h2>{{ t('admin.reportsByBreed') }}</h2><p>{{ t('admin.topBreeds') }}</p></div></header><VChart v-if="dashboard.breedStats.length" class="admin-chart" :option="breakdownOption(t('admin.tickets'), dashboard.breedStats)" autoresize /><div v-else class="admin-chart-message">{{ t('admin.noBreeds') }}</div></article>
+        <article class="admin-chart-card"><header><div><h2>{{ t('admin.notificationStatus') }}</h2><p>{{ t('admin.readFinalized') }}</p></div></header><VChart v-if="dashboard.notificationReads.length" class="admin-chart" :option="readsOption" autoresize /><div v-else class="admin-chart-message">{{ t('admin.noNotifications') }}</div></article>
       </div>
-      <article class="admin-chart-card claims-list"><header><div><h2>Lista de reclamos recibidos</h2><p>Todas las notificaciones reportadas de la plataforma</p></div></header>
-        <div v-if="claimsLoading" class="section-state">Cargando notificaciones…</div>
-        <div v-else-if="claimsError" class="section-state error-state" role="alert">{{ claimsError }} <button @click="loadReportedNotifications">Reintentar</button></div>
-        <div v-else-if="!notifications.length" class="admin-chart-message">No hay notificaciones reportadas.</div>
+      <article class="admin-chart-card claims-list"><header><div><h2>{{ t('admin.reportedClaimsList') }}</h2><p>{{ t('admin.reportedNotificationsList') }}</p></div></header>
+        <div v-if="claimsLoading" class="section-state">{{ t('admin.loadingNotifications') }}</div>
+        <div v-else-if="claimsError" class="section-state error-state" role="alert">{{ claimsError }} <button @click="loadReportedNotifications">{{ t('common.retry') }}</button></div>
+        <div v-else-if="!notifications.length" class="admin-chart-message">{{ t('admin.noReportedNotifications') }}</div>
         <div v-else class="table-scroll">
           <table class="claims-table">
             <thead>
               <tr>
                 <th>ID</th>
-                <th>Título</th>
-                <th>Remitente</th>
-                <th>Contenido</th>
-                <th>Fecha</th>
-                <th>Estado</th>
+                <th>{{ t('admin.title') }}</th>
+                <th>{{ t('admin.sender') }}</th>
+                <th>{{ t('admin.content') }}</th>
+                <th>{{ t('admin.date') }}</th>
+                <th>{{ t('admin.state') }}</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="notification in notifications" :key="notification.id" class="claim-row">
                 <td class="col-id">{{ notification.id}}</td>
-                <td class="col-sender">Reporte #{{ notification.reportId }}</td>
-                <td class="col-sender">{{ notification.senderName || 'No indicado' }}</td>
+                <td class="col-sender">{{ t('admin.report') }} #{{ notification.reportId }}</td>
+                <td class="col-sender">{{ notification.senderName || t('admin.notIndicated') }}</td>
                 <td class="col-reason">
-                  <span :title="notification.message || 'Sin motivo'">
-                    {{ truncateText(notification.message || 'Sin especificar', 60) }}
+                  <span :title="notification.message || t('admin.noReason')">
+                    {{ truncateText(notification.message || t('common.notSpecified'), 60) }}
                   </span>
                 </td>
                 <td class="col-date">{{ formatDate(notification.createdAt) }}</td>
                 <td class="col-status">
-                  <span class="status-badge">{{ notification.finalizado ? 'Finalizado' : 'En proceso' }}</span>
+                  <span class="status-badge">{{ notification.finalizado ? t('petHistory.finished') : t('admin.inProgress') }}</span>
                 </td>
                 <td class="col-action">
                   <button class="view-button" type="button" @click="selectedNotification = notification">
-                    Ver detalles
+                    {{ t('admin.viewDetails') }}
                   </button>
                 </td>
               </tr>
@@ -264,67 +266,67 @@ const readsOption = computed(() => ({
       </article>
 
       <div v-if="selectedNotification" class="detail-overlay" role="presentation" @click.self="selectedNotification = null">
-        <section class="detail-dialog" role="dialog" aria-modal="true" :aria-label="`Notificación reportada ${selectedNotification.id}`">
+        <section class="detail-dialog" role="dialog" aria-modal="true" :aria-label="`${t('admin.notification')} ${selectedNotification.id}`">
           <header>
             <div>
-              <div class="eyebrow">Notificación #{{ selectedNotification.id }}</div>
+              <div class="eyebrow">{{ t('admin.notification') }} #{{ selectedNotification.id }}</div>
               <h2>{{ selectedNotification.title }}</h2>
             </div>
-            <button class="close-button" type="button" aria-label="Cerrar" @click="selectedNotification = null">×</button>
+            <button class="close-button" type="button" :aria-label="t('common.close')" @click="selectedNotification = null">×</button>
           </header>
 
           <dl class="detail-list">
             <div>
-              <dt>ID de notificación</dt>
+              <dt>{{ t('admin.notificationId') }}</dt>
               <dd>{{ selectedNotification.id }}</dd>
             </div>
             <div>
-              <dt>Tipo</dt>
+              <dt>{{ t('admin.type') }}</dt>
               <dd>{{ selectedNotification.type }}</dd>
             </div>
             <div>
-              <dt>Remitente</dt>
-              <dd>{{ selectedNotification.senderName || 'No indicado' }}</dd>
+              <dt>{{ t('admin.sender') }}</dt>
+              <dd>{{ selectedNotification.senderName || t('admin.notIndicated') }}</dd>
             </div>
             <div>
-              <dt>Receptor</dt>
+              <dt>{{ t('admin.recipient') }}</dt>
               <dd>{{ selectedNotification.recipientUserId }}</dd>
             </div>
             <div>
-              <dt>Reporte asociado</dt>
+              <dt>{{ t('admin.associatedReport') }}</dt>
               <dd>#{{ selectedNotification.reportId }}</dd>
             </div>
             <div>
-              <dt>Fecha de creación</dt>
+              <dt>{{ t('admin.createdAt') }}</dt>
               <dd>{{ formatDate(selectedNotification.createdAt) }}</dd>
             </div>
             <div>
-              <dt>Estado de lectura</dt>
-              <dd>{{ selectedNotification.read ? 'Leída' : 'No leída' }}</dd>
+              <dt>{{ t('admin.readState') }}</dt>
+              <dd>{{ selectedNotification.read ? t('notifications.read') : t('notifications.unread') }}</dd>
             </div>
             <div class="detail-full">
-              <dt>Contenido</dt>
+              <dt>{{ t('admin.content') }}</dt>
               <dd>{{ selectedNotification.message || selectedNotification.title }}</dd>
             </div>
             <div v-if="selectedNotification.senderPhone">
-              <dt>Teléfono del remitente</dt>
+              <dt>{{ t('admin.senderPhone') }}</dt>
               <dd>{{ selectedNotification.senderPhone }}</dd>
             </div>
             <div v-if="selectedNotification.senderEmail">
-              <dt>Email del remitente</dt>
+              <dt>{{ t('admin.senderEmail') }}</dt>
               <dd>{{ selectedNotification.senderEmail }}</dd>
             </div>
           </dl>
 
           <div v-if="selectedNotification.petImage" class="image-section">
-            <h3>Imagen de mascota</h3>
+            <h3>{{ t('admin.petImage') }}</h3>
             <a :href="selectedNotification.petImage" target="_blank" rel="noopener noreferrer">
-              <img :src="selectedNotification.petImage" alt="Imagen de mascota" />
+              <img :src="selectedNotification.petImage" :alt="t('admin.petImage')" />
             </a>
           </div>
 
           <div v-if="selectedNotification.evidenceImages?.length" class="image-section">
-            <h3>Evidencias adjuntas ({{ selectedNotification.evidenceImages.length }})</h3>
+            <h3>{{ t('admin.attachedEvidence', { count: selectedNotification.evidenceImages.length }) }}</h3>
             <div class="evidence-grid">
               <a
                 v-for="(image, index) in selectedNotification.evidenceImages"
@@ -334,8 +336,8 @@ const readsOption = computed(() => ({
                 rel="noopener noreferrer"
                 class="evidence-item"
               >
-                <img :src="image.url" :alt="`Evidencia ${index + 1}`" />
-                <span>Ver evidencia {{ index + 1 }}</span>
+                <img :src="image.url" :alt="t('common.evidenceAlt', { index: index + 1 })" />
+                <span>{{ t('admin.viewEvidence', { index: index + 1 }) }}</span>
               </a>
             </div>
           </div>

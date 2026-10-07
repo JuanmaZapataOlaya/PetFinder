@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const emit = defineEmits<{ 'update:modelValue': [files: File[]] }>()
 const previews = ref<string[]>([])
 const error = ref('')
 const allowedExtensions = new Set(['jpg', 'jpeg', 'heic', 'heif', 'png', 'dng'])
-const allowedFormatsLabel = 'JPG, JPEG, HEIC, HEIF, PNG o DNG'
+const { t } = useI18n()
+const allowedFormatsLabel = 'JPG, JPEG, HEIC, HEIF, PNG, DNG'
 
 function clearPreviews() {
   previews.value.forEach((preview) => URL.revokeObjectURL(preview))
@@ -19,13 +21,13 @@ function onFilesSelected(event: Event) {
   error.value = ''
 
   if (files.length !== 2) {
-    error.value = 'Debes seleccionar exactamente 2 fotografías.'
+    error.value = t('evidence.exactlyTwo')
     emit('update:modelValue', [])
     input.value = ''
     return
   }
   if (files.some((file) => !allowedExtensions.has(file.name.split('.').pop()?.toLowerCase() || ''))) {
-    error.value = `Formato no permitido. Usa únicamente ${allowedFormatsLabel}.`
+    error.value = t('evidence.formatError', { formats: allowedFormatsLabel })
     emit('update:modelValue', [])
     input.value = ''
     return
@@ -40,12 +42,12 @@ onBeforeUnmount(clearPreviews)
 
 <template>
   <div class="evidence-picker">
-    <label for="notification-evidence">Fotografías de evidencia (obligatorias)</label>
+    <label for="notification-evidence">{{ t('evidence.label') }}</label>
     <input id="notification-evidence" type="file" accept=".jpg,.jpeg,.heic,.heif,.png,.dng" multiple @change="onFilesSelected" />
-    <small>Selecciona exactamente 2 imágenes en {{ allowedFormatsLabel }}.</small>
+    <small>{{ t('evidence.hint', { formats: allowedFormatsLabel }) }}</small>
     <p v-if="error" class="evidence-error" role="alert">{{ error }}</p>
-    <div v-if="previews.length" class="evidence-previews" aria-label="Vista previa de evidencias">
-      <img v-for="(preview, index) in previews" :key="preview" :src="preview" :alt="`Evidencia ${index + 1}`" />
+    <div v-if="previews.length" class="evidence-previews" :aria-label="t('evidence.preview')">
+      <img v-for="(preview, index) in previews" :key="preview" :src="preview" :alt="t('common.evidenceAlt', { index: index + 1 })" />
     </div>
   </div>
 </template>

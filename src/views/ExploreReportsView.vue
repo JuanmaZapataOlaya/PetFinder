@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import GoogleMapPicker from '@/components/GoogleMapPicker.vue'
 import Icon from '@/components/Icon.vue'
@@ -9,6 +10,7 @@ import type { PetTicket, PetType, TicketKind } from '@/types'
 import { getCurrentUser } from '@/services/authService'
 import { getContactInfo } from '@/services/contactService'
 import { searchPets } from '@/services/petSearchService'
+import { usePetLabels } from '@/composables/usePetLabels'
 
 const DEFAULT_SEARCH_QUERY = 'findall'
 const RESULTS_PER_PAGE = 6
@@ -24,6 +26,8 @@ const RADIUS_OPTIONS = [
 ]
 
 const route = useRoute()
+const { t } = useI18n()
+const { reportKind, reportStatus, petType } = usePetLabels()
 const search = ref('')
 const searchResults = ref<PetTicket[]>([])
 const searchError = ref('')
@@ -63,7 +67,7 @@ async function submitSearch(query: string) {
     })
     searchResults.value = results
   } catch (error) {
-    searchError.value = error instanceof Error ? error.message : 'No fue posible realizar la búsqueda.'
+    searchError.value = error instanceof Error ? error.message : t('explore.searchFailed')
   } finally {
     searching.value = false
   }
@@ -186,63 +190,63 @@ function formatDistance(meters: number): string {
 
 <template>
   <section class="page-view unified-explore">
-    <div class="eyebrow">Comunidad PetFinder</div>
-    <h1>Explorar reportes</h1>
-    <p class="page-intro">Encuentra mascotas reportadas y revisa coincidencias cerca de ti.</p>
+    <div class="eyebrow">{{ t('explore.heading') }}</div>
+    <h1>{{ t('explore.title') }}</h1>
+    <p class="page-intro">{{ t('explore.intro') }}</p>
 
-    <section class="explore-section" aria-label="Explorar reportes">
+    <section class="explore-section" :aria-label="t('explore.title')">
       <div class="unified-section-heading">
         <div>
-          <div class="eyebrow">Comunidad</div>
-          <p>Consulta las mascotas perdidas y encontradas cerca de ti.</p>
+          <div class="eyebrow">{{ t('explore.community') }}</div>
+          <p>{{ t('explore.nearby') }}</p>
         </div>
-        <span class="section-count">{{ publicTickets.length }} reportes</span>
+        <span class="section-count">{{ t('explore.reportCount', { count: publicTickets.length }) }}</span>
       </div>
       <form class="explore-toolbar" data-tutorial="explore-search" @submit.prevent="handleSearchSubmit">
-        <div class="search-box"><Icon name="search" :size="16" /><input v-model="search" type="search" placeholder="Buscar por nombre, zona o raza" aria-label="Buscar reportes públicos" /></div>
-        <button class="primary-button search-submit" type="submit" :disabled="searching"><Icon name="search" :size="15" />{{ searching ? 'Buscando...' : 'Buscar' }}</button>
-        <select v-model="kind" aria-label="Filtrar reportes por tipo"><option value="">Todos los tipos</option><option value="Perdida">Perdida</option><option value="Encontrada">Encontrada</option></select>
-        <select v-model="type" aria-label="Filtrar reportes por especie"><option value="">Todas las especies</option><option value="Perro">Perro</option><option value="Gato">Gato</option><option value="Ave">Ave</option><option value="Otro">Otro</option></select>
+        <div class="search-box"><Icon name="search" :size="16" /><input v-model="search" type="search" :placeholder="t('explore.searchPlaceholder')" :aria-label="t('accessibility.publicReports')" /></div>
+        <button class="primary-button search-submit" type="submit" :disabled="searching"><Icon name="search" :size="15" />{{ searching ? t('common.searching') : t('common.search') }}</button>
+        <select v-model="kind" :aria-label="t('explore.filterKind')"><option value="">{{ t('common.allTypes') }}</option><option value="Perdida">{{ t('common.lost') }}</option><option value="Encontrada">{{ t('common.found') }}</option></select>
+        <select v-model="type" :aria-label="t('explore.filterSpecies')"><option value="">{{ t('common.allSpecies') }}</option><option value="Perro">{{ t('common.dog') }}</option><option value="Gato">{{ t('common.cat') }}</option><option value="Ave">{{ t('common.bird') }}</option><option value="Otro">{{ t('common.other') }}</option></select>
       </form>
-      <div v-if="kind || type" class="active-filters" aria-label="Filtros activos">
+      <div v-if="kind || type" class="active-filters" :aria-label="t('accessibility.activeFilters')">
         <span v-if="kind" class="filter-chip">
-          <span>Tipo: {{ kind }}</span>
-          <button class="filter-chip-remove" type="button" aria-label="Eliminar filtro de tipo" title="Eliminar filtro" @click="removeKindFilter"><Icon name="x" :size="13" /></button>
+          <span>{{ t('explore.typeLabel', { value: reportKind(kind) }) }}</span>
+          <button class="filter-chip-remove" type="button" :aria-label="t('accessibility.removeTypeFilter')" :title="t('explore.removeFilter')" @click="removeKindFilter"><Icon name="x" :size="13" /></button>
         </span>
         <span v-if="type" class="filter-chip">
-          <span>Especie: {{ type }}</span>
-          <button class="filter-chip-remove" type="button" aria-label="Eliminar filtro de especie" title="Eliminar filtro" @click="removeTypeFilter"><Icon name="x" :size="13" /></button>
+          <span>{{ t('explore.speciesLabel', { value: petType(type) }) }}</span>
+          <button class="filter-chip-remove" type="button" :aria-label="t('accessibility.removeSpeciesFilter')" :title="t('explore.removeFilter')" @click="removeTypeFilter"><Icon name="x" :size="13" /></button>
         </span>
       </div>
       <p v-if="searchError" class="search-error" role="alert">{{ searchError }}</p>
       <div class="explore-layout">
         <div class="public-report-grid">
           <article v-for="ticket in paginatedPublicTickets" :key="ticket.id" class="public-report-card">
-            <img :src="ticket.image" :alt="`Foto de ${ticket.name}`" />
+            <img :src="ticket.image" :alt="t('common.reportPhotoAlt', { name: ticket.name })" />
             <div class="public-report-content">
-              <span class="status" :class="{ resolved: ticket.status === 'Resuelta' }">{{ ticket.kind }} · {{ ticket.status }}</span>
+              <span class="status" :class="{ resolved: ticket.status === 'Resuelta' }">{{ reportKind(ticket.kind) }} · {{ reportStatus(ticket.status) }}</span>
               <h2>{{ ticket.name }}</h2>
-              <p>{{ ticket.type }} · {{ ticket.breed || 'Raza no especificada' }}</p>
+              <p>{{ petType(ticket.type) }} · {{ ticket.breed || t('common.noBreed') }}</p>
               <small>{{ ticket.location }} · {{ ticket.date }}</small>
-              <button class="secondary-button" @click="selectedTicket = ticket">Ver en el mapa</button>
+              <button class="secondary-button" @click="selectedTicket = ticket">{{ t('explore.viewOnMap') }}</button>
             </div>
           </article>
-          <div v-if="!publicTickets.length" class="empty-state">No hay reportes que coincidan con estos filtros.</div>
-          <p class="search-help">¿ No ves a tu mascota ?, utiliza la barra de busqueda para más resultados</p>
-          <nav v-if="publicTickets.length && totalPages > 1" class="pagination" aria-label="Paginación de reportes">
-            <button class="secondary-button" type="button" :disabled="currentPage === 1" @click="goToPreviousPage">Anterior</button>
-            <span>Página {{ currentPage }} de {{ totalPages }}</span>
-            <button class="secondary-button" type="button" :disabled="currentPage === totalPages" @click="goToNextPage">Siguiente</button>
+          <div v-if="!publicTickets.length" class="empty-state">{{ t('explore.noReportsMatch') }}</div>
+          <p class="search-help">{{ t('explore.searchHelp') }}</p>
+          <nav v-if="publicTickets.length && totalPages > 1" class="pagination" :aria-label="t('accessibility.reportPagination')">
+            <button class="secondary-button" type="button" :disabled="currentPage === 1" @click="goToPreviousPage">{{ t('common.previous') }}</button>
+            <span>{{ t('common.pageOf', { page: currentPage, total: totalPages }) }}</span>
+            <button class="secondary-button" type="button" :disabled="currentPage === totalPages" @click="goToNextPage">{{ t('common.next') }}</button>
           </nav>
         </div>
         <aside class="explore-map-panel">
-          <div class="section-head"><h3>Ubicaciones reportadas</h3><span>{{ publicTickets.length }}</span></div>
+          <div class="section-head"><h3>{{ t('explore.reportedLocations') }}</h3><span>{{ publicTickets.length }}</span></div>
           <div v-if="paginatedPublicTickets.length" class="public-map-list">
             <button v-for="ticket in paginatedPublicTickets" :key="`map-${ticket.id}`" class="public-map-item" @click="selectedTicket = ticket">
-              <img :src="ticket.image" :alt="ticket.name" /><span><strong>{{ ticket.name }}</strong><small>{{ ticket.location }}</small></span><b>{{ ticket.kind }}</b>
+              <img :src="ticket.image" :alt="ticket.name" /><span><strong>{{ ticket.name }}</strong><small>{{ ticket.location }}</small></span><b>{{ reportKind(ticket.kind) }}</b>
             </button>
           </div>
-          <p v-else class="empty-state">Sin ubicaciones.</p>
+          <p v-else class="empty-state">{{ t('explore.noLocations') }}</p>
         </aside>
       </div>
     </section>
@@ -250,44 +254,44 @@ function formatDistance(meters: number): string {
     <section id="matches" class="matches-section" aria-labelledby="matches-title">
       <div class="unified-section-heading">
         <div>
-          <div class="eyebrow">Motor de coincidencias</div>
-          <h2 id="matches-title">Coincidencias</h2>
-          <p>Reportes de otros usuarios que podrían estar relacionados con tu mascota.</p>
+          <div class="eyebrow">{{ t('explore.matchesEngine') }}</div>
+          <h2 id="matches-title">{{ t('explore.matchesTitle') }}</h2>
+          <p>{{ t('explore.matchesIntro') }}</p>
         </div>
-        <span class="section-count">{{ matchedReports.length }} resultados</span>
+        <span class="section-count">{{ t('explore.matchCount', { count: matchedReports.length }) }}</span>
       </div>
       <div class="explore-toolbar" data-tutorial="match-filters">
-        <select v-model="filterKind" aria-label="Filtrar coincidencias por tipo"><option value="Todos">Todos los tipos</option><option value="Perdida">Perdida</option><option value="Encontrada">Encontrada</option></select>
-        <select v-model="filterType" aria-label="Filtrar coincidencias por especie"><option value="Todas">Todas las especies</option><option value="Perro">Perro</option><option value="Gato">Gato</option><option value="Ave">Ave</option><option value="Otro">Otro</option></select>
-        <select v-model.number="filterRadius" aria-label="Filtrar coincidencias por distancia"><option v-for="option in RADIUS_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option></select>
+        <select v-model="filterKind" :aria-label="t('explore.filterMatchesKind')"><option value="Todos">{{ t('common.allTypes') }}</option><option value="Perdida">{{ t('common.lost') }}</option><option value="Encontrada">{{ t('common.found') }}</option></select>
+        <select v-model="filterType" :aria-label="t('explore.filterMatchesSpecies')"><option value="Todas">{{ t('common.allSpecies') }}</option><option value="Perro">{{ t('common.dog') }}</option><option value="Gato">{{ t('common.cat') }}</option><option value="Ave">{{ t('common.bird') }}</option><option value="Otro">{{ t('common.other') }}</option></select>
+        <select v-model.number="filterRadius" :aria-label="t('explore.filterDistance')"><option v-for="option in RADIUS_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option></select>
       </div>
       <div class="matches-map-section">
-        <div class="section-head"><h3>Ubicación de referencia</h3><span>{{ matchedReports.length }} resultado{{ matchedReports.length !== 1 ? 's' : '' }}</span></div>
-        <p class="map-hint">Arrastra el marcador para cambiar el centro de búsqueda.</p>
+        <div class="section-head"><h3>{{ t('explore.referenceLocation') }}</h3><span>{{ t('explore.resultCount', matchedReports.length) }}</span></div>
+        <p class="map-hint">{{ t('explore.mapHint') }}</p>
         <GoogleMapPicker :latitude="refLat" :longitude="refLng" :radius-meters="filterRadius" :other-markers="mapMarkers" :interactive="true" height="340px" @location-change="onReferenceMove" />
       </div>
       <div class="match-grid">
         <article v-for="{ ticket, distanceM } in reportsWithDistance" :key="ticket.id" class="match-feature">
           <img :src="ticket.image" :alt="ticket.name" />
-          <div><span class="match-score">{{ ticket.kind }} · {{ ticket.type }}</span><h2>{{ ticket.name }}</h2><p>{{ ticket.location }} · {{ ticket.breed || 'Raza no especificada' }}</p><small v-if="distanceM !== null" class="match-distance">{{ formatDistance(distanceM) }} de distancia</small><button class="secondary-button" @click="selectedTicket = ticket">Ver detalle</button></div>
+          <div><span class="match-score">{{ reportKind(ticket.kind) }} · {{ petType(ticket.type) }}</span><h2>{{ ticket.name }}</h2><p>{{ ticket.location }} · {{ ticket.breed || t('common.noBreed') }}</p><small v-if="distanceM !== null" class="match-distance">{{ formatDistance(distanceM) }} {{ t('common.distance') }}</small><button class="secondary-button" @click="selectedTicket = ticket">{{ t('explore.viewDetails') }}</button></div>
         </article>
-        <div v-if="!matchedReports.length" class="empty-state">No hay coincidencias con los filtros seleccionados.</div>
+        <div v-if="!matchedReports.length" class="empty-state">{{ t('explore.noMatches') }}</div>
       </div>
     </section>
   </section>
 
   <div v-if="selectedTicket" class="modal-backdrop" @click.self="selectedTicket = null">
     <section class="modal detail-modal">
-      <div class="modal-head"><div><h2>{{ selectedTicket.name }}</h2><p class="modal-intro">{{ selectedTicket.kind }} · {{ selectedTicket.location }}</p></div><button class="close-button" aria-label="Cerrar" @click="selectedTicket = null">Cerrar</button></div>
+      <div class="modal-head"><div><h2>{{ selectedTicket.name }}</h2><p class="modal-intro">{{ reportKind(selectedTicket.kind) }} · {{ selectedTicket.location }}</p></div><button class="close-button" :aria-label="t('common.close')" @click="selectedTicket = null">{{ t('common.close') }}</button></div>
       <GoogleMapPicker :latitude="selectedTicket.latitude" :longitude="selectedTicket.longitude" :image-url="selectedTicket.image" :other-markers="otherReportsForMap" :interactive="false" height="360px" />
-      <div class="detail-summary"><span>{{ selectedTicket.type }} · {{ selectedTicket.breed || 'Raza no especificada' }}</span><strong>{{ selectedTicket.color || 'Color no especificado' }}</strong><small>{{ selectedTicket.note }}</small></div>
-      <div class="owner-contact"><h3>Información del Propietario</h3><div v-if="ownerContactInfo"><p><strong>Nombre:</strong> {{ ownerContactInfo.fullName || 'No especificado' }}</p><p><strong>Teléfono:</strong> {{ ownerContactInfo.phoneNumber || 'No especificado' }}</p><p><strong>Email:</strong> {{ ownerContactInfo.email || 'No especificado' }}</p></div><p v-else class="owner-contact-empty">No se encuentra información de contacto disponible.</p>
+      <div class="detail-summary"><span>{{ petType(selectedTicket.type) }} · {{ selectedTicket.breed || t('common.noBreed') }}</span><strong>{{ selectedTicket.color || t('common.noColor') }}</strong><small>{{ selectedTicket.note }}</small></div>
+      <div class="owner-contact"><h3>{{ t('common.ownerInformation') }}</h3><div v-if="ownerContactInfo"><p><strong>{{ t('common.name') }}:</strong> {{ ownerContactInfo.fullName || t('common.notSpecified') }}</p><p><strong>{{ t('common.phone') }}:</strong> {{ ownerContactInfo.phoneNumber || t('common.notSpecified') }}</p><p><strong>{{ t('common.email') }}:</strong> {{ ownerContactInfo.email || t('common.notSpecified') }}</p></div><p v-else class="owner-contact-empty">{{ t('common.noContactInfo') }}</p>
         <div v-if="selectedTicket.ownerId !== currentUser?.id" class="contact-actions">
           <p class="proof-notice">
-            <template v-if="selectedTicket.kind === 'Perdida'">Esta mascota está reportada como perdida. Para contactar al propietario, debes subir imágenes que demuestren que tienes a la mascota.</template>
-            <template v-else>Esta mascota está reportada como encontrada. Para contactar a quien la encontró, debes subir imágenes que demuestren que eres el dueño de la mascota.</template>
+            <template v-if="selectedTicket.kind === 'Perdida'">{{ t('explore.lostProof') }}</template>
+            <template v-else>{{ t('explore.foundProof') }}</template>
           </p>
-          <button v-if="!showContactForm" class="primary-button" @click="showContactForm = true">Contactar al propietario</button>
+          <button v-if="!showContactForm" class="primary-button" @click="showContactForm = true">{{ t('explore.contactOwner') }}</button>
           <ContactRequestForm
             v-if="showContactForm"
             :ticket="selectedTicket"

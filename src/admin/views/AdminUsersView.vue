@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import VChart from 'vue-echarts'
 import '@/admin/charts/echarts'
 import { getUsersPage, deleteUser } from '@/admin/services/adminApi'
@@ -25,6 +26,7 @@ interface UserRow {
 interface UsersPage { total: number; users: UserRow[] }
 
 const pageSize = 50
+const { t, locale } = useI18n()
 const offset = ref(0)
 const deletingId = ref('')
 const actionError = ref('')
@@ -49,22 +51,22 @@ const roleOption = computed(() => {
   return {
     color: ['#e57959', '#77a661', '#5f8fc4', '#b37ac8'],
     tooltip: { trigger: 'item' },
-    series: [{ name: 'Roles en esta página', type: 'pie', radius: ['40%', '68%'], data: [...grouped].map(([name, value]) => ({ name, value })) }],
+    series: [{ name: t('admin.rolesOnPage'), type: 'pie', radius: ['40%', '68%'], data: [...grouped].map(([name, value]) => ({ name, value })) }],
   }
 })
 
 async function eliminarUsuario(user: UserRow) {
-  if (!window.confirm(`¿Eliminar permanentemente a ${user.name} (${user.email || user.id})? Esta acción no se puede deshacer y también eliminará sus datos asociados.`)) return
+  if (!window.confirm(t('admin.confirmDeleteUser', { name: user.name }))) return
   deletingId.value = user.id
   actionError.value = ''
   actionSuccess.value = ''
   try {
     await deleteUser(user.id)
     if (offset.value > 0 && data.value?.users.length === 1) offset.value = Math.max(0, offset.value - pageSize)
-    actionSuccess.value = `Se eliminó la cuenta de ${user.name}.`
+    actionSuccess.value = t('admin.userDeleted', { name: user.name })
     await reload()
   } catch (cause) {
-    actionError.value = cause instanceof Error ? cause.message : 'No se pudo eliminar el usuario.'
+    actionError.value = cause instanceof Error ? cause.message : t('admin.deleteUserError')
   } finally {
     deletingId.value = ''
   }
@@ -73,31 +75,31 @@ async function eliminarUsuario(user: UserRow) {
 
 <template>
   <section class="page-view admin-page section-dashboard">
-    <header class="section-heading"><div><div class="eyebrow">Panel de administración</div><h1>Usuarios y roles</h1><p>Perfiles, información de contacto y permisos asignados.</p></div></header>
-    <div v-if="loading" class="section-state">Cargando perfiles y roles…</div>
-    <div v-else-if="error" class="section-state error-state" role="alert">{{ error }} <button @click="reload">Reintentar</button></div>
+    <header class="section-heading"><div><div class="eyebrow">{{ t('admin.panel') }}</div><h1>{{ t('admin.usersTitle') }}</h1><p>{{ t('admin.usersIntro') }}</p></div></header>
+    <div v-if="loading" class="section-state">{{ t('admin.loadingUsers') }}</div>
+    <div v-else-if="error" class="section-state error-state" role="alert">{{ error }} <button @click="reload">{{ t('common.retry') }}</button></div>
     <template v-else-if="data">
       <p v-if="actionError" class="action-message action-error" role="alert">{{ actionError }}</p>
       <p v-if="actionSuccess" class="action-message action-success" role="status">{{ actionSuccess }}</p>
       <div class="users-summary">
-        <article class="admin-kpi-card"><div class="admin-kpi-label">Usuarios registrados</div><strong>{{ data.total.toLocaleString('es-CO') }}</strong><p>Perfiles disponibles</p></article>
-        <article class="admin-chart-card roles-card"><header><div><h2>Roles asignados</h2><p>Distribución en la página actual</p></div></header><VChart v-if="data.users.length" class="admin-chart" :option="roleOption" autoresize /><div v-else class="admin-chart-message">No hay usuarios en esta página.</div></article>
+        <article class="admin-kpi-card"><div class="admin-kpi-label">{{ t('admin.registeredUsers') }}</div><strong>{{ data.total.toLocaleString(locale) }}</strong><p>{{ t('admin.availableProfiles') }}</p></article>
+        <article class="admin-chart-card roles-card"><header><div><h2>{{ t('admin.assignedRoles') }}</h2><p>{{ t('admin.currentPage') }}</p></div></header><VChart v-if="data.users.length" class="admin-chart" :option="roleOption" autoresize /><div v-else class="admin-chart-message">{{ t('admin.noUsersPage') }}</div></article>
       </div>
       <article class="admin-chart-card users-table-card">
-        <header><div><h2>Perfiles de usuario</h2><p>Mostrando {{ data.users.length }} de {{ data.total }} usuarios. La eliminación es permanente.</p></div></header>
-        <div v-if="!data.users.length" class="admin-chart-message">No hay usuarios para mostrar.</div>
-        <div v-else class="table-scroll"><table><thead><tr><th>Usuario</th><th>Cuenta</th><th>Contacto</th><th>Dirección</th><th>Roles</th><th>Registrado</th><th>Acción</th></tr></thead><tbody>
+        <header><div><h2>{{ t('admin.userProfiles') }}</h2><p>{{ t('admin.showingUsers', { count: data.users.length, total: data.total }) }}</p></div></header>
+        <div v-if="!data.users.length" class="admin-chart-message">{{ t('admin.noUsers') }}</div>
+        <div v-else class="table-scroll"><table><thead><tr><th>{{ t('admin.user') }}</th><th>{{ t('admin.account') }}</th><th>{{ t('admin.contact') }}</th><th>{{ t('admin.address') }}</th><th>{{ t('admin.roles') }}</th><th>{{ t('admin.registered') }}</th><th>{{ t('admin.action') }}</th></tr></thead><tbody>
           <tr v-for="user in data.users" :key="user.id">
             <td class="identity-cell"><img v-if="user.photo_url" :src="user.photo_url" alt="" /><span>{{ user.contact?.full_name || user.name }}</span></td>
-            <td>{{ user.email || user.contact?.email || 'Sin email' }}<small>{{ user.id }}</small></td>
-            <td>{{ user.contact?.phone_number || '—' }}<small v-if="user.contact?.age">Edad: {{ user.contact.age }}</small></td>
+            <td>{{ user.email || user.contact?.email || t('admin.noEmail') }}<small>{{ user.id }}</small></td>
+            <td>{{ user.contact?.phone_number || '—' }}<small v-if="user.contact?.age">{{ t('admin.age') }}: {{ user.contact.age }}</small></td>
             <td>{{ user.contact?.address || '—' }}<small v-if="user.contact?.latitude !== null && user.contact?.latitude !== undefined">{{ user.contact.latitude }}, {{ user.contact.longitude }}</small></td>
-            <td><span v-if="user.roles.length" class="role-tags"><b v-for="role in user.roles" :key="role.id">{{ role.name }}</b></span><span v-else>Sin rol</span></td>
-            <td>{{ new Date(user.created_at).toLocaleDateString('es-CO') }}</td>
-            <td><button class="delete-button" type="button" :disabled="deletingId === user.id" @click="eliminarUsuario(user)">{{ deletingId === user.id ? 'Eliminando…' : 'Eliminar' }}</button></td>
+            <td><span v-if="user.roles.length" class="role-tags"><b v-for="role in user.roles" :key="role.id">{{ role.name }}</b></span><span v-else>{{ t('admin.noRole') }}</span></td>
+            <td>{{ new Date(user.created_at).toLocaleDateString(locale) }}</td>
+            <td><button class="delete-button" type="button" :disabled="deletingId === user.id" @click="eliminarUsuario(user)">{{ deletingId === user.id ? t('admin.deleteInProgress') : t('dashboard.delete') }}</button></td>
           </tr>
         </tbody></table></div>
-        <footer class="pagination"><button type="button" :disabled="offset === 0 || loading" @click="offset -= pageSize; reload()">Anterior</button><span>Página {{ page }} de {{ Math.max(1, Math.ceil(data.total / pageSize)) }}</span><button type="button" :disabled="offset + pageSize >= data.total || loading" @click="offset += pageSize; reload()">Siguiente</button></footer>
+        <footer class="pagination"><button type="button" :disabled="offset === 0 || loading" @click="offset -= pageSize; reload()">{{ t('common.previous') }}</button><span>{{ t('common.pageOf', { page, total: Math.max(1, Math.ceil(data.total / pageSize)) }) }}</span><button type="button" :disabled="offset + pageSize >= data.total || loading" @click="offset += pageSize; reload()">{{ t('common.next') }}</button></footer>
       </article>
     </template>
   </section>

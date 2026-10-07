@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import GoogleMapPicker from '@/components/GoogleMapPicker.vue'
 import { breedsByType } from '@/data/tickets'
 import { getCurrentUser } from '@/services/authService'
@@ -18,6 +19,7 @@ const emit = defineEmits<{
   close: []
   saved: []
 }>()
+const { t } = useI18n()
 
 const defaultImage = 'https://images.unsplash.com/photo-1558788353-f76d92427f16?auto=format&fit=crop&w=640&q=85'
 
@@ -87,7 +89,7 @@ function handleImage(event: Event) {
   const extension = file?.name.split('.').pop()?.toLowerCase() || ''
   if (!file) return
   if (!allowedExtensions.has(extension)) {
-    descriptionError.value = 'Formato no permitido. Usa únicamente JPG, JPEG, HEIC, HEIF, PNG o DNG.'
+    descriptionError.value = t('reportForm.invalidImage')
     input.value = ''
     return
   }
@@ -113,7 +115,7 @@ async function generateDescription() {
       kind: reportKind.value,
     })
   } catch {
-    descriptionError.value = 'No se pudo generar la descripción. Intenta de nuevo.'
+    descriptionError.value = t('reportForm.descriptionError')
   } finally {
     isGeneratingDescription.value = false
   }
@@ -156,55 +158,55 @@ async function submit() {
     <form class="modal" @submit.prevent="submit">
       <div class="modal-head">
         <div>
-          <h2>{{ editingTicket === null ? 'Reportar una mascota' : 'Editar reporte' }}</h2>
-          <p class="modal-intro">Completa los datos de tu reporte.</p>
+          <h2>{{ t(editingTicket === null ? 'reportForm.createTitle' : 'reportForm.editTitle') }}</h2>
+          <p class="modal-intro">{{ t('reportForm.intro') }}</p>
         </div>
-        <button type="button" class="close-button" aria-label="Cerrar" @click="emit('close')">✕</button>
+        <button type="button" class="close-button" :aria-label="t('common.close')" @click="emit('close')">✕</button>
       </div>
       <div class="form-grid">
         <div class="form-field">
-          <label for="kind">Tipo de reporte</label>
+          <label for="kind">{{ t('reportForm.reportType') }}</label>
           <select id="kind" v-model="reportKind">
-            <option value="Perdida">Mascota perdida</option>
-            <option value="Encontrada">Mascota encontrada</option>
+            <option value="Perdida">{{ t('reportForm.lostPet') }}</option>
+            <option value="Encontrada">{{ t('reportForm.foundPet') }}</option>
           </select>
         </div>
         <div class="form-field">
-          <label for="pet-name">Nombre (opcional)</label>
-          <input id="pet-name" v-model="reportName" placeholder="Ej. Luna" />
+          <label for="pet-name">{{ t('reportForm.petName') }}</label>
+          <input id="pet-name" v-model="reportName" :placeholder="t('reportForm.namePlaceholder')" />
         </div>
         <div class="form-field">
           <label for="pet-type">Especie</label>
           <select id="pet-type" v-model="reportType">
-            <option value="Perro">Perro</option>
-            <option value="Gato">Gato</option>
-            <option value="Ave">Ave</option>
-            <option value="Otro">Otro</option>
+            <option value="Perro">{{ t('common.dog') }}</option>
+            <option value="Gato">{{ t('common.cat') }}</option>
+            <option value="Ave">{{ t('common.bird') }}</option>
+            <option value="Otro">{{ t('common.other') }}</option>
           </select>
         </div>
         <div class="form-field">
           <label for="pet-breed">Raza</label>
           <select id="pet-breed" v-model="reportBreed">
-            <option value="">Selecciona una raza</option>
+            <option value="">{{ t('reportForm.breedPlaceholder') }}</option>
             <option v-for="breed in breeds" :key="breed" :value="breed">{{ breed }}</option>
-            <option value="Otros">Otros</option>
+            <option value="Otros">{{ t('reportForm.otherBreeds') }}</option>
           </select>
         </div>
         <div class="form-field">
-          <label for="pet-color">Color principal</label>
-          <input id="pet-color" v-model="reportColor" placeholder="Ej. Canela" />
+          <label for="pet-color">{{ t('reportForm.mainColor') }}</label>
+          <input id="pet-color" v-model="reportColor" :placeholder="t('reportForm.colorPlaceholder')" />
         </div>
         <div class="form-field">
-          <label for="pet-image">Imagen</label>
+          <label for="pet-image">{{ t('reportForm.image') }}</label>
           <input id="pet-image" type="file" accept=".jpg,.jpeg,.heic,.heif,.png,.dng" @change="handleImage" />
-          <small>JPG, JPEG, HEIC, HEIF, PNG o DNG. Máximo 5 MB.</small>
+          <small>{{ t('reportForm.imageHint') }}</small>
           <p v-if="descriptionError" class="form-error" role="alert">{{ descriptionError }}</p>
         </div>
         <div v-if="imagePreview" class="image-preview full">
-          <img :src="imagePreview" alt="Vista previa de la mascota" />
+          <img :src="imagePreview" :alt="t('reportForm.imagePreview')" />
         </div>
         <div class="form-field full">
-          <label>Ubicación exacta</label>
+          <label>{{ t('reportForm.exactLocation') }}</label>
           <GoogleMapPicker
             :latitude="reportLatitude"
             :longitude="reportLongitude"
@@ -213,29 +215,29 @@ async function submit() {
             height="220px"
             @location-change="onLocationChange"
           />
-          <small>Arrastra el marcador para ajustar la ubicación. Navegar por el mapa no lo mueve.</small>
+          <small>{{ t('reportForm.mapHint') }}</small>
         </div>
         <div class="form-field full">
-          <label for="pet-location">Dirección o referencia</label>
-          <input id="pet-location" v-model="reportLocation" placeholder="Selecciona un punto o escribe una referencia" required />
+          <label for="pet-location">{{ t('reportForm.address') }}</label>
+          <input id="pet-location" v-model="reportLocation" :placeholder="t('reportForm.addressPlaceholder')" required />
         </div>
         <div class="form-field full">
           <div class="description-field-head">
-            <label for="pet-note">Descripción</label>
+            <label for="pet-note">{{ t('reportForm.description') }}</label>
             <button
               type="button"
               class="text-button"
               :disabled="!imagePreview || isGeneratingDescription"
-              :title="!imagePreview ? 'Carga una imagen para habilitar esta función.' : ''"
+              :title="!imagePreview ? t('reportForm.imageRequired') : ''"
               @click="generateDescription"
-            >{{ isGeneratingDescription ? 'Generando...' : 'Generar' }}</button>
+            >{{ isGeneratingDescription ? t('common.generated') : t('reportForm.generate') }}</button>
           </div>
-          <textarea id="pet-note" v-model="reportNote" placeholder="Cuéntanos cómo podemos reconocerla..."></textarea>
+          <textarea id="pet-note" v-model="reportNote" :placeholder="t('reportForm.descriptionPlaceholder')"></textarea>
         </div>
       </div>
       <div class="modal-actions">
-        <button type="button" class="secondary-button" @click="emit('close')">Cancelar</button>
-        <button type="submit" class="primary-button">{{ editingTicket === null ? 'Publicar reporte' : 'Guardar cambios' }}</button>
+        <button type="button" class="secondary-button" @click="emit('close')">{{ t('common.cancel') }}</button>
+        <button type="submit" class="primary-button">{{ t(editingTicket === null ? 'reportForm.publish' : 'reportForm.saveChanges') }}</button>
       </div>
     </form>
   </div>

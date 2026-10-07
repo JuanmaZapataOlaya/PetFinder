@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{ visible: boolean }>()
 const emit = defineEmits<{ accept: []; cancel: [] }>()
 const yesButton = ref<HTMLButtonElement | null>(null)
+const { t } = useI18n()
 
 watch(() => props.visible, async (visible) => {
   if (!visible) return
@@ -26,11 +28,11 @@ watch(() => props.visible, async (visible) => {
         aria-describedby="tutorial-confirmation-message"
       >
         <div class="tutorial-confirmation__icon" aria-hidden="true">🐾</div>
-        <h2 id="tutorial-confirmation-title">Bienvenido</h2>
-        <p id="tutorial-confirmation-message">¿Quieres un recorrido rápido por la aplicación?</p>
+        <h2 id="tutorial-confirmation-title">{{ t('tutorial.welcome') }}</h2>
+        <p id="tutorial-confirmation-message">{{ t('tutorial.question') }}</p>
         <div class="tutorial-confirmation__actions">
-          <button ref="yesButton" type="button" class="primary-button" @click="emit('accept')">Sí</button>
-          <button type="button" class="secondary-button" @click="emit('cancel')">No</button>
+          <button ref="yesButton" type="button" class="primary-button" @click="emit('accept')">{{ t('tutorial.yes') }}</button>
+          <button type="button" class="secondary-button" @click="emit('cancel')">{{ t('tutorial.no') }}</button>
         </div>
       </section>
     </div>

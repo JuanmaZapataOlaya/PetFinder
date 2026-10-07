@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { AUTH_STATE_CHANGED_EVENT, getCurrentUser } from '@/services/authService'
 import { createRealtimeSession, executeAgentAction, sendAgentMessage, startAgentSession, type AgentAction } from '@/services/agentService'
 import Icon from '@/components/Icon.vue'
@@ -36,6 +37,7 @@ interface ChatMessage {
 }
 
 const router = useRouter()
+const { t, locale } = useI18n()
 const { isConfirmationVisible, runTutorial, acceptTutorial, closeTutorial } = useTutorial()
 const { requestNotificationCommand } = useNotificationCommands()
 const isChatOpen = ref(false)
@@ -50,24 +52,31 @@ const messagesContainer = ref<HTMLElement | null>(null)
 const proactiveMessage = ref('')
 const remoteAudio = ref<HTMLAudioElement | null>(null)
 
-const proactiveMessages = [
-  'Guau, guau... ¿necesitas ayuda con algo?',
-  '¿Buscas a tu mascota? Mi olfato es muy agudo, quizas pueda encontrarla',
-  '¡Grrr! No dejes que la interfaz te confunda, yo te guío sin morder.',
-  'Auuuu... Siento que hay notificaciones recientes que deberías ver.',
-]
-
-const chatMessages = ref<ChatMessage[]>([
-  { id: 1, role: 'assistant', content: '¡Hola! Soy tu asistente virtual de PetFinder.', timestamp: new Date() },
-  { id: 2, role: 'assistant', content: 'Puedo orientarte sobre reportes, mascotas y el uso de la plataforma.', timestamp: new Date() },
+const proactiveMessages = computed(() => [
+  t('chat.proactive1'),
+  t('chat.proactive2'),
+  t('chat.proactive3'),
+  t('chat.proactive4'),
 ])
 
-const realtimeStatusLabels = {
-  listening: 'Te escucho, habla cuando quieras',
-  userSpeaking: 'Escuchando...',
-  thinking: 'Pensando...',
-  speaking: 'Hablando... (puedes interrumpirme)',
-} as const
+const chatMessages = ref<ChatMessage[]>([
+  { id: 1, role: 'assistant', content: t('chat.welcome'), timestamp: new Date() },
+  { id: 2, role: 'assistant', content: t('chat.intro'), timestamp: new Date() },
+])
+
+const realtimeStatusLabels = computed(() => ({
+  listening: t('chat.listening'),
+  userSpeaking: t('chat.userSpeaking'),
+  thinking: t('chat.thinking'),
+  speaking: t('chat.speaking'),
+}))
+
+watch(locale, () => {
+  const greeting = chatMessages.value.find((message) => message.id === 1)
+  const introduction = chatMessages.value.find((message) => message.id === 2)
+  if (greeting) greeting.content = t('chat.welcome')
+  if (introduction) introduction.content = t('chat.intro')
+})
 
 let nextMessageId = 3
 let proactiveMessageIndex = 0
@@ -100,7 +109,7 @@ async function initSession() {
     agentSessionId.value = newSessionId
     sessionStorage.setItem(storageKey, newSessionId)
   } catch {
-    agentError.value = 'No fue posible conectar el asistente. Intenta de nuevo más tarde.'
+    agentError.value = t('chat.connectError')
   }
 }
 
@@ -111,8 +120,8 @@ async function resetSession() {
   sessionStorage.removeItem(storageKey)
   agentSessionId.value = null
   chatMessages.value = [
-    { id: 1, role: 'assistant', content: '¡Hola! Soy tu asistente virtual de PetFinder.', timestamp: new Date() },
-    { id: 2, role: 'assistant', content: 'Puedo orientarte sobre reportes, mascotas y el uso de la plataforma.', timestamp: new Date() },
+    { id: 1, role: 'assistant', content: t('chat.welcome'), timestamp: new Date() },
+    { id: 2, role: 'assistant', content: t('chat.intro'), timestamp: new Date() },
   ]
   nextMessageId = 3
   agentError.value = ''
@@ -121,7 +130,7 @@ async function resetSession() {
     agentSessionId.value = newSessionId
     sessionStorage.setItem(storageKey, newSessionId)
   } catch {
-    agentError.value = 'No fue posible reiniciar el asistente. Intenta de nuevo más tarde.'
+    agentError.value = t('chat.resetError')
   }
 }
 
@@ -266,7 +275,7 @@ function handleRealtimeMessage(event: MessageEvent<string>) {
       if (name) void respondToToolCall(name, parsedArgs, payload.call_id)
     }
   } catch {
-    agentError.value = 'Se recibió un evento de voz inválido.'
+    agentError.value = t('chat.invalidVoiceEvent')
   }
 }
 
@@ -364,7 +373,7 @@ async function startRealtimeSession() {
     realtimeWebSocket.addEventListener('message', handleRealtimeMessage)
 
     realtimeWebSocket.addEventListener('error', () => {
-      agentError.value = 'Error en la conexión con el servicio de voz en tiempo real.'
+      agentError.value = t('chat.realtimeError')
       void endRealtimeSession()
     })
 
@@ -375,7 +384,7 @@ async function startRealtimeSession() {
     })
   } catch (error) {
     await endRealtimeSession()
-    agentError.value = error instanceof Error ? error.message : 'No fue posible iniciar la sesión de voz.'
+    agentError.value = error instanceof Error ? error.message : t('chat.voiceStartError')
   } finally {
     isRealtimeStarting.value = false
   }
@@ -388,16 +397,16 @@ function startTutorial() {
 
 function showNextProactiveMessage() {
   if (isChatOpen.value) return
-  const nextMessage = proactiveMessages[proactiveMessageIndex]
+  const nextMessage = proactiveMessages.value[proactiveMessageIndex]
   if (!nextMessage) return
   proactiveMessage.value = nextMessage
-  proactiveMessageIndex = (proactiveMessageIndex + 1) % proactiveMessages.length
+  proactiveMessageIndex = (proactiveMessageIndex + 1) % proactiveMessages.value.length
   if (proactiveMessageHideTimer) clearTimeout(proactiveMessageHideTimer)
   proactiveMessageHideTimer = setTimeout(() => { proactiveMessage.value = '' }, 5000)
 }
 
 function formatMessageTime(timestamp: Date) {
-  return new Intl.DateTimeFormat('es-CO', { hour: '2-digit', minute: '2-digit' }).format(timestamp)
+  return new Intl.DateTimeFormat(locale.value, { hour: '2-digit', minute: '2-digit' }).format(timestamp)
 }
 
 function handleMessageKeydown(event: KeyboardEvent) {
@@ -427,7 +436,7 @@ async function sendMessage() {
     addAssistantMessage(response.message)
     void handleAgentAction(response.action, response.payload)
   } catch (error) {
-    agentError.value = error instanceof Error ? error.message : 'No fue posible obtener una respuesta del asistente.'
+    agentError.value = error instanceof Error ? error.message : t('chat.responseError')
   } finally {
     isAgentLoading.value = false
   }
@@ -549,22 +558,22 @@ onBeforeUnmount(() => {
 
 <template>
   <Transition name="proactive-message">
-    <button v-if="!isChatOpen && proactiveMessage" type="button" class="proactive-message" aria-label="Abrir asistente virtual" @click="toggleChat">
+    <button v-if="!isChatOpen && proactiveMessage" class="proactive-message" type="button" :aria-label="t('chat.assistant')" @click="toggleChat">
       {{ proactiveMessage }}
     </button>
   </Transition>
-  <button v-if="!isChatOpen" type="button" class="chat-launcher" aria-label="Abrir asistente virtual" @click="toggleChat">
+  <button v-if="!isChatOpen" type="button" class="chat-launcher" :aria-label="t('chat.assistant')" @click="toggleChat">
     <img src="/media/LogoAgente.png" alt="" />
   </button>
-  <section v-else class="chat-window" aria-label="Asistente Virtual">
+  <section v-else class="chat-window" :aria-label="t('chat.assistant')">
     <header class="chat-header">
       <div class="chat-agent">
         <img src="/media/LogoAgente.png" alt="" />
-        <div><strong>Asistente Virtual</strong><span><i /> En línea</span></div>
+        <div><strong>{{ t('chat.assistant') }}</strong><span><i /> {{ t('chat.online') }}</span></div>
       </div>
       <div class="chat-header-actions">
-        <button type="button" class="chat-reset" aria-label="Reiniciar chat" title="Reiniciar chat y empezar de nuevo" @click="resetSession">↺</button>
-        <button type="button" class="chat-close" aria-label="Cerrar asistente virtual" @click="closeChat">×</button>
+        <button type="button" class="chat-reset" :aria-label="t('chat.reset')" :title="t('chat.resetTitle')" @click="resetSession">↺</button>
+        <button type="button" class="chat-close" :aria-label="t('chat.close')" @click="closeChat">×</button>
       </div>
     </header>
     <div ref="messagesContainer" class="chat-messages" role="log" aria-live="polite">
@@ -576,19 +585,19 @@ onBeforeUnmount(() => {
       </div>
     </div>
     <div v-if="isAgentLoading || agentError" class="chat-status-area">
-      <p v-if="isAgentLoading" class="chat-status" role="status">El asistente está escribiendo...</p>
+      <p v-if="isAgentLoading" class="chat-status" role="status">{{ t('chat.typing') }}</p>
       <p v-else-if="agentError" class="chat-status chat-status--error" role="alert">{{ agentError }}</p>
     </div>
     <div v-if="isRealtimeActive || isRealtimeStarting" class="realtime-panel">
       <span class="realtime-indicator" :class="{ 'realtime-indicator--starting': isRealtimeStarting }" />
-      <p>{{ isRealtimeStarting ? 'Conectando al asistente...' : realtimeStatusLabels[realtimeStatus] }}</p>
-      <button type="button" :disabled="isRealtimeStarting" @click="endRealtimeSession">Finalizar sesión</button>
+      <p>{{ isRealtimeStarting ? t('chat.connecting') : realtimeStatusLabels[realtimeStatus] }}</p>
+      <button type="button" :disabled="isRealtimeStarting" @click="endRealtimeSession">{{ t('chat.endSession') }}</button>
     </div>
     <form v-else class="chat-composer" @submit.prevent="sendMessage">
-      <textarea v-model="draftMessage" rows="1" aria-label="Escribe tu mensaje" placeholder="Escribe tu mensaje..." @keydown="handleMessageKeydown" />
-      <button type="submit" aria-label="Enviar mensaje" :disabled="!draftMessage.trim()">➤</button>
-      <button type="button" class="voice-button" aria-label="Activar asistente por voz" title="Activar asistente por voz" @click="startRealtimeSession"><Icon name="mic" :size="17" /></button>
-      <small>Enter para enviar · Shift + Enter para una nueva línea</small>
+      <textarea v-model="draftMessage" rows="1" :aria-label="t('chat.messageLabel')" :placeholder="t('chat.messagePlaceholder')" @keydown="handleMessageKeydown" />
+      <button type="submit" :aria-label="t('chat.send')" :disabled="!draftMessage.trim()">➤</button>
+      <button type="button" class="voice-button" :aria-label="t('chat.activateVoice')" :title="t('chat.activateVoice')" @click="startRealtimeSession"><Icon name="mic" :size="17" /></button>
+      <small>{{ t('chat.keyboardHint') }}</small>
     </form>
     <audio ref="remoteAudio" autoplay />
   </section>
@@ -600,36 +609,50 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.chat-launcher,
+.chat-window,
+.proactive-message {
+  --chat-edge: 28px;
+}
+
 .chat-launcher {
   position: fixed;
-  right: 28px;
-  bottom: 28px;
+  right: var(--chat-edge);
+  bottom: var(--chat-edge);
   z-index: 20;
   width: 68px;
   height: 68px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 8px;
   border: 0;
   border-radius: 50%;
   background: #d9f28f;
   box-shadow: 0 8px 24px #173c3240, 0 0 0 5px #ffffffc9;
+  cursor: pointer;
   transition: transform .2s ease, box-shadow .2s ease;
 }
 
 .proactive-message {
   position: fixed;
-  right: 108px;
-  bottom: 38px;
+  right: calc(var(--chat-edge) + 80px);
+  bottom: calc(var(--chat-edge) + 10px);
   z-index: 20;
-  max-width: 235px;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(235px, calc(100vw - 152px));
   border: 1px solid #dce7d8;
   border-radius: 14px 14px 3px 14px;
   padding: 11px 14px;
   background: white;
   color: #304238;
   box-shadow: 0 7px 22px #173c3226;
+  font-family: inherit;
   font-size: 12px;
   line-height: 1.35;
   text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
   transform-origin: right center;
 }
 
@@ -659,7 +682,7 @@ onBeforeUnmount(() => {
 
 .chat-launcher:hover { transform: translateY(-4px) scale(1.04); box-shadow: 0 13px 30px #173c3252, 0 0 0 5px #ffffff; }
 .chat-launcher img { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
-.chat-window { position: fixed; right: 28px; bottom: 28px; z-index: 20; display: flex; flex-direction: column; width: min(410px, calc(100vw - 32px)); height: min(620px, calc(100vh - 48px)); overflow: hidden; border: 1px solid #dce7d8; border-radius: 16px; background: #f7faf6; box-shadow: 0 18px 50px #173c3238; }
+.chat-window { position: fixed; right: var(--chat-edge); bottom: var(--chat-edge); z-index: 20; display: flex; flex-direction: column; box-sizing: border-box; width: min(410px, calc(100vw - 32px)); height: min(620px, calc(100vh - 48px)); height: min(620px, calc(100dvh - 48px)); max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); overflow: hidden; border: 1px solid #dce7d8; border-radius: 16px; background: #f7faf6; box-shadow: 0 18px 50px #173c3238; }
 .chat-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; background: #173c32; color: white; }
 .chat-agent { display: flex; align-items: center; gap: 11px; }
 .chat-agent img { width: 40px; height: 40px; border-radius: 50%; background: #d9f28f; object-fit: contain; }
@@ -696,8 +719,15 @@ onBeforeUnmount(() => {
 .realtime-indicator { width: 10px; height: 10px; flex: 0 0 auto; border-radius: 50%; background: #78ad58; box-shadow: 0 0 0 4px #dcebd7; }
 .realtime-indicator--starting { background: #d09a48; box-shadow: 0 0 0 4px #f3e5c9; }
 @media (max-width: 650px) {
-  .proactive-message { right: 86px; bottom: 25px; max-width: 190px; }
-  .chat-launcher { right: 16px; bottom: 16px; width: 58px; height: 58px; }
-  .chat-window { right: 16px; bottom: 16px; width: calc(100vw - 32px); height: min(620px, calc(100vh - 32px)); }
+  .chat-launcher,
+  .chat-window,
+  .proactive-message { --chat-edge: 16px; }
+  .chat-launcher { width: 58px; height: 58px; }
+  .proactive-message { right: calc(var(--chat-edge) + 70px); bottom: calc(var(--chat-edge) + 8px); max-width: min(190px, calc(100vw - 102px)); }
+  .chat-window { width: calc(100vw - 32px); height: min(620px, calc(100vh - 32px)); height: min(620px, calc(100dvh - 32px)); }
+}
+
+@media (max-height: 480px) {
+  .chat-window { height: calc(100vh - 24px); height: calc(100dvh - 24px); max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
 }
 </style>

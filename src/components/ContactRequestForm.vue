@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import NotificationEvidencePicker from '@/components/NotificationEvidencePicker.vue'
 import { getCurrentUser } from '@/services/authService'
 import { getContactInfo } from '@/services/contactService'
@@ -10,6 +11,7 @@ import type { ContactInfo, PetTicket } from '@/types'
 const props = defineProps<{
   ticket: PetTicket
 }>()
+const { t } = useI18n()
 
 const emit = defineEmits<{
   close: []
@@ -24,15 +26,15 @@ const feedback = ref({ text: '', isError: false })
 async function submit() {
   const currentUser = getCurrentUser()
   if (!currentUser) {
-    feedback.value = { text: 'Debes iniciar sesión para contactar al propietario.', isError: true }
+    feedback.value = { text: t('contactRequest.loginRequired'), isError: true }
     return
   }
   if (evidenceFiles.value.length !== 2) {
-    feedback.value = { text: 'Debes adjuntar exactamente 2 fotografías como evidencia.', isError: true }
+    feedback.value = { text: t('contactRequest.evidenceRequired'), isError: true }
     return
   }
   if (!contactDataConsent.value) {
-    feedback.value = { text: 'Debes aceptar compartir tus datos de contacto con el propietario.', isError: true }
+    feedback.value = { text: t('contactRequest.consentRequired'), isError: true }
     return
   }
   sending.value = true
@@ -45,21 +47,21 @@ async function submit() {
       reportId: props.ticket.id,
       petImage: props.ticket.image,
       type: 'CONTACT_REQUEST',
-      title: 'Nueva solicitud de contacto',
+      title: t('contactRequest.requestTitle'),
       message: contactMessage.value,
-      senderName: sender.fullName || currentUser.name || 'Usuario',
-      senderPhone: sender.phoneNumber || 'No especificado',
-      senderEmail: sender.email || 'No especificado',
+      senderName: sender.fullName || currentUser.name || t('account.user'),
+      senderPhone: sender.phoneNumber || t('common.notSpecified'),
+      senderEmail: sender.email || t('common.notSpecified'),
       evidenceImages,
     })
     if (result.success) {
-      feedback.value = { text: 'Tu solicitud fue enviada y las evidencias fueron validadas automáticamente.', isError: false }
+      feedback.value = { text: t('contactRequest.sent'), isError: false }
       emit('close')
     } else {
-      feedback.value = { text: result.error || 'Ocurrió un error.', isError: true }
+      feedback.value = { text: result.error || t('contactRequest.error'), isError: true }
     }
   } catch (error) {
-    feedback.value = { text: error instanceof Error ? error.message : 'No se pudieron cargar las fotografías.', isError: true }
+    feedback.value = { text: error instanceof Error ? error.message : t('contactRequest.photoError'), isError: true }
   } finally {
     sending.value = false
   }
@@ -73,25 +75,25 @@ function cancel() {
 
 <template>
   <form class="contact-form" @submit.prevent="submit">
-    <label for="contact-message">Mensaje (Opcional)</label>
+    <label for="contact-message">{{ t('contactRequest.message') }}</label>
     <textarea
       id="contact-message"
       v-model="contactMessage"
       maxlength="200"
-      placeholder="Ej: Hola, creo haber visto a tu mascota..."
+      :placeholder="t('contactRequest.placeholder')"
     />
     <NotificationEvidencePicker v-model="evidenceFiles" />
     <label class="contact-consent">
       <input v-model="contactDataConsent" type="checkbox" />
-      <span>Acepto que mis datos personales de contacto sean compartidos con la persona que publicó este reporte.</span>
+      <span>{{ t('contactRequest.consent') }}</span>
     </label>
     <p v-if="feedback.text" class="contact-feedback" :class="{ error: feedback.isError }" :role="feedback.isError ? 'alert' : 'status'" aria-live="polite">
       {{ feedback.text }}
     </p>
     <div class="contact-form-actions">
-      <button type="button" class="secondary-button" @click="cancel">Cancelar</button>
+      <button type="button" class="secondary-button" @click="cancel">{{ t('common.cancel') }}</button>
       <button type="submit" class="primary-button" :disabled="sending || evidenceFiles.length !== 2 || !contactDataConsent">
-        {{ sending ? 'Enviando...' : 'Enviar solicitud' }}
+        {{ sending ? t('contactRequest.sending') : t('contactRequest.sendRequest') }}
       </button>
     </div>
   </form>

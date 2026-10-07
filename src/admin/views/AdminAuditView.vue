@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import VChart from 'vue-echarts'
 import '@/admin/charts/echarts'
 import { supabase } from '@/services/supabase'
@@ -16,6 +17,7 @@ interface AuditRow {
 }
 
 const pageSize = 100
+const { t, locale } = useI18n()
 const offset = ref(0)
 const rows = ref<AuditRow[]>([])
 const total = ref(0)
@@ -33,7 +35,7 @@ async function loadAudit() {
     if (queryError) throw queryError
     total.value = count ?? 0
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : 'No se pudo cargar la auditoría.'
+    error.value = cause instanceof Error ? cause.message : t('admin.auditLoadError')
     rows.value = []
   } finally {
     loading.value = false
@@ -51,7 +53,7 @@ const actionOption = computed(() => {
     grid: { left: 40, right: 18, top: 18, bottom: 65, containLabel: true },
     xAxis: { type: 'category', data: entries.map(([action]) => action), axisLabel: { rotate: 25 } },
     yAxis: { type: 'value', minInterval: 1 },
-    series: [{ name: 'Eventos', type: 'bar', data: entries.map(([, amount]) => amount) }],
+    series: [{ name: t('admin.events'), type: 'bar', data: entries.map(([, amount]) => amount) }],
   }
 })
 function metadataText(value: Record<string, unknown>) {
@@ -62,18 +64,18 @@ onMounted(loadAudit)
 
 <template>
   <section class="page-view admin-page section-dashboard">
-    <header class="section-heading"><div><div class="eyebrow">Panel de administración</div><h1>Auditoría</h1><p>Registro de acciones administrativas y eventos relevantes de la plataforma.</p></div><button class="refresh-button" type="button" :disabled="loading" @click="loadAudit">Actualizar</button></header>
-    <div v-if="loading" class="section-state">Cargando registro de auditoría…</div>
-    <div v-else-if="error" class="section-state error-state" role="alert">{{ error }} <button @click="loadAudit">Reintentar</button></div>
+    <header class="section-heading"><div><div class="eyebrow">{{ t('admin.panel') }}</div><h1>{{ t('admin.audit') }}</h1><p>{{ t('admin.auditIntro') }}</p></div><button class="refresh-button" type="button" :disabled="loading" @click="loadAudit">{{ t('admin.refresh') }}</button></header>
+    <div v-if="loading" class="section-state">{{ t('admin.loadingAudit') }}</div>
+    <div v-else-if="error" class="section-state error-state" role="alert">{{ error }} <button @click="loadAudit">{{ t('common.retry') }}</button></div>
     <template v-else>
-      <article class="admin-kpi-card audit-total"><div class="admin-kpi-label">Eventos registrados</div><strong>{{ total.toLocaleString('es-CO') }}</strong><p>Registros en audit_logs</p></article>
-      <article class="admin-chart-card action-chart"><header><div><h2>Eventos por acción</h2><p>Distribución de la página actual del registro.</p></div></header><VChart v-if="rows.length" class="admin-chart" :option="actionOption" autoresize /><div v-else class="admin-chart-message">No hay eventos registrados.</div></article>
-      <article class="admin-chart-card audit-table-card"><header><div><h2>Registro de eventos</h2><p>Acción, actor, destino y metadatos completos.</p></div></header>
-        <div v-if="!rows.length" class="admin-chart-message">No hay eventos para mostrar.</div>
-        <div v-else class="table-scroll"><table><thead><tr><th>Fecha</th><th>Actor</th><th>Acción</th><th>Tipo de destino</th><th>ID de destino</th><th>Metadatos</th></tr></thead><tbody>
-          <tr v-for="row in rows" :key="row.id"><td>{{ new Date(row.created_at).toLocaleString('es-CO') }}</td><td>{{ row.actor_user_id || 'Sistema' }}</td><td>{{ row.action }}</td><td>{{ row.target_type }}</td><td>{{ row.target_id || '—' }}</td><td><pre>{{ metadataText(row.metadata) }}</pre></td></tr>
+      <article class="admin-kpi-card audit-total"><div class="admin-kpi-label">{{ t('admin.events') }}</div><strong>{{ total.toLocaleString(locale) }}</strong><p>{{ t('admin.auditRows') }}</p></article>
+      <article class="admin-chart-card action-chart"><header><div><h2>{{ t('admin.eventsByAction') }}</h2><p>{{ t('admin.currentPageDistribution') }}</p></div></header><VChart v-if="rows.length" class="admin-chart" :option="actionOption" autoresize /><div v-else class="admin-chart-message">{{ t('admin.noEvents') }}</div></article>
+      <article class="admin-chart-card audit-table-card"><header><div><h2>{{ t('admin.eventLog') }}</h2><p>{{ t('admin.eventColumnsIntro') }}</p></div></header>
+        <div v-if="!rows.length" class="admin-chart-message">{{ t('admin.noEventsToShow') }}</div>
+        <div v-else class="table-scroll"><table><thead><tr><th>{{ t('admin.date') }}</th><th>{{ t('admin.actor') }}</th><th>{{ t('admin.action') }}</th><th>{{ t('admin.targetType') }}</th><th>{{ t('admin.targetId') }}</th><th>{{ t('admin.metadata') }}</th></tr></thead><tbody>
+          <tr v-for="row in rows" :key="row.id"><td>{{ new Date(row.created_at).toLocaleString(locale) }}</td><td>{{ row.actor_user_id || t('admin.system') }}</td><td>{{ row.action }}</td><td>{{ row.target_type }}</td><td>{{ row.target_id || '—' }}</td><td><pre>{{ metadataText(row.metadata) }}</pre></td></tr>
         </tbody></table></div>
-        <footer class="pagination"><button type="button" :disabled="offset === 0 || loading" @click="offset -= pageSize; loadAudit()">Anterior</button><span>Página {{ page }} de {{ Math.max(1, Math.ceil(total / pageSize)) }}</span><button type="button" :disabled="offset + pageSize >= total || loading" @click="offset += pageSize; loadAudit()">Siguiente</button></footer>
+        <footer class="pagination"><button type="button" :disabled="offset === 0 || loading" @click="offset -= pageSize; loadAudit()">{{ t('common.previous') }}</button><span>{{ t('common.pageOf', { page, total: Math.max(1, Math.ceil(total / pageSize)) }) }}</span><button type="button" :disabled="offset + pageSize >= total || loading" @click="offset += pageSize; loadAudit()">{{ t('common.next') }}</button></footer>
       </article>
     </template>
   </section>

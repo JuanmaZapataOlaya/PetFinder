@@ -1,9 +1,11 @@
 <script setup lang="ts">
 /// <reference types="google.maps" />
 import { onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { importLibrary, setOptions } from '@googlemaps/js-api-loader'
 
 const googleMapsKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+const { t } = useI18n()
 if (googleMapsKey) setOptions({ key: googleMapsKey, v: 'weekly' })
 
 const props = withDefaults(defineProps<{ latitude?: number; longitude?: number; height?: string; interactive?: boolean; imageUrl?: string; otherMarkers?: Array<{ latitude: number; longitude: number; image: string; name: string }>; radiusMeters?: number }>(), { latitude: 19.4326, longitude: -99.1332, height: '250px', interactive: true, imageUrl: '', otherMarkers: () => [], radiusMeters: 0 })
@@ -63,7 +65,7 @@ async function loadMap() {
       clickableIcons: false,
       gestureHandling: props.interactive ? 'greedy' : 'cooperative',
     })
-    marker = new AdvancedMarkerElement({ map, position: center, gmpDraggable: props.interactive, title: 'Ubicación del reporte', content: markerContent(props.imageUrl ? props.imageUrl : 'https://cdn-icons-png.flaticon.com/512/14665/14665484.png', 65, '#5f8a67') }) // SI DEJA DE FUNCIONAR EL ICONO DEL MARKER HE AQUI EL RESPONSABLE
+    marker = new AdvancedMarkerElement({ map, position: center, gmpDraggable: props.interactive, title: t('map.reportLocation'), content: markerContent(props.imageUrl ? props.imageUrl : 'https://cdn-icons-png.flaticon.com/512/14665/14665484.png', 65, '#5f8a67') }) // SI DEJA DE FUNCIONAR EL ICONO DEL MARKER HE AQUI EL RESPONSABLE
     if (props.interactive) {
       marker.addListener('dragend', () => updateLocation(marker?.position))
     }
@@ -71,7 +73,7 @@ async function loadMap() {
     renderRadiusCircle()
     
   } catch {
-    mapError.value = 'No se pudo cargar Google Maps. Revisa la API key, facturación y APIs habilitadas.'
+    mapError.value = t('map.loadError')
   }
 }
 function renderOtherMarkers() {
@@ -118,5 +120,5 @@ onMounted(loadMap)
 </script>
 
 <template>
-  <div class="google-map-wrap"><div ref="mapElement" class="google-map" :style="{ height }" /><div v-if="!hasApiKey" class="map-config-message">Configura `VITE_GOOGLE_MAPS_API_KEY` para activar Google Maps.</div><div v-else-if="mapError" class="map-config-message">{{ mapError }}</div><small v-if="address" class="map-address">{{ address }}</small></div>
+  <div class="google-map-wrap"><div ref="mapElement" class="google-map" :style="{ height }" /><div v-if="!hasApiKey" class="map-config-message">{{ t('map.configure') }}</div><div v-else-if="mapError" class="map-config-message">{{ mapError }}</div><small v-if="address" class="map-address">{{ address }}</small></div>
 </template>

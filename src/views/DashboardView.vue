@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import Icon from '@/components/Icon.vue'
 import ReportFormModal from '@/components/ReportFormModal.vue'
 import { tickets as allTickets } from '@/data/tickets'
 import { getCurrentUser } from '@/services/authService'
 import type { PetTicket, PetType, TicketKind } from '@/types'
+import { usePetLabels } from '@/composables/usePetLabels'
 
 const activeTab = ref<'Todas' | 'Activas' | 'Resueltas'>('Todas')
 const search = ref('')
@@ -16,6 +18,8 @@ const initialModalData = ref<{ type?: PetType; kind?: TicketKind; name?: string;
 const currentUser = computed(() => getCurrentUser())
 const route = useRoute()
 const router = useRouter()
+const { t, locale } = useI18n()
+const { reportKind, reportStatus, petType } = usePetLabels()
 
 const userTickets = computed(() => allTickets.filter((ticket) => ticket.ownerId === currentUser.value?.id))
 const filteredTickets = computed(() => userTickets.value.filter((ticket) => {
@@ -43,7 +47,7 @@ function openEdit(ticket: PetTicket) {
 }
 
 async function deleteTicket(id: number) {
-  if (!window.confirm('¿Eliminar este reporte? Esta acción no se puede deshacer.')) return
+  if (!window.confirm(t('dashboard.deleteConfirm'))) return
   const { removeTicket } = await import('@/data/tickets')
   try { await removeTicket(id) } catch { return }
   showToast.value = true
@@ -76,41 +80,41 @@ watch(() => route.query.action, (action) => {
 <template>
   <section class="content-head">
     <div class="head-copy">
-      <div class="eyebrow">Viernes, 21 de agosto de 2026</div>
-      <h1>Hola, {{ currentUser?.name || 'amigo' }} <span aria-hidden="true">☀</span></h1>
-      <p>Un pequeño paso puede llevarlos de vuelta a casa.</p>
+      <div class="eyebrow">{{ new Intl.DateTimeFormat(locale, { dateStyle: 'full' }).format(new Date()) }}</div>
+      <h1>{{ t('dashboard.hello', { name: currentUser?.name || t('dashboard.friend') }) }} <span aria-hidden="true">☀</span></h1>
+      <p>{{ t('dashboard.tagline') }}</p>
     </div>
-    <button class="primary-button" @click="openCreate"><Icon name="plus" :size="17" /> Reportar mascota</button>
+    <button class="primary-button" @click="openCreate"><Icon name="plus" :size="17" /> {{ t('dashboard.createReport') }}</button>
   </section>
 
-  <section class="stats-grid" aria-label="Resumen de actividad" data-tutorial="summary">
+  <section class="stats-grid" :aria-label="t('accessibility.activitySummary')" data-tutorial="summary">
     <article class="stat-card">
-      <div class="stat-top"><span>Reportes activos</span><span class="stat-icon"><Icon name="paw" :size="15" /></span></div>
+      <div class="stat-top"><span>{{ t('dashboard.activeReports') }}</span><span class="stat-icon"><Icon name="paw" :size="15" /></span></div>
       <div class="stat-number">{{ userTickets.filter((t) => t.status === 'Activa').length }}</div>
-      <span class="stat-note">En seguimiento</span>
+      <span class="stat-note">{{ t('dashboard.following') }}</span>
     </article>
     <article class="stat-card">
-      <div class="stat-top"><span>Coincidencias</span><span class="stat-icon"><Icon name="heart" :size="15" /></span></div>
+      <div class="stat-top"><span>{{ t('dashboard.matches') }}</span><span class="stat-icon"><Icon name="heart" :size="15" /></span></div>
       <div class="stat-number">{{ userTickets.filter((t) => t.match > 0).length }}</div>
-      <span class="stat-note">Basadas en tus reportes</span>
+      <span class="stat-note">{{ t('dashboard.basedOnReports') }}</span>
     </article>
     <article class="stat-card">
-      <div class="stat-top"><span>Mensajes sin leer</span><span class="stat-icon"><Icon name="message" :size="15" /></span></div>
+      <div class="stat-top"><span>{{ t('dashboard.unreadMessages') }}</span><span class="stat-icon"><Icon name="message" :size="15" /></span></div>
       <div class="stat-number">0</div>
-      <span class="stat-note">Todo al día</span>
+      <span class="stat-note">{{ t('dashboard.allCaughtUp') }}</span>
     </article>
     <article class="stat-card">
-      <div class="stat-top"><span>Casos resueltos</span><span class="stat-icon"><Icon name="heart" :size="15" /></span></div>
+      <div class="stat-top"><span>{{ t('dashboard.resolvedCases') }}</span><span class="stat-icon"><Icon name="heart" :size="15" /></span></div>
       <div class="stat-number">{{ userTickets.filter((t) => t.status === 'Resuelta').length }}</div>
-      <span class="stat-note">Gracias a la comunidad</span>
+      <span class="stat-note">{{ t('dashboard.communityThanks') }}</span>
     </article>
   </section>
 
   <div class="workspace">
     <section>
       <div class="section-head">
-        <h2>Mis reportes</h2>
-        <RouterLink to="/reportes">Ver todos <Icon name="chevron" :size="13" /></RouterLink>
+        <h2>{{ t('dashboard.myReports') }}</h2>
+        <RouterLink to="/reportes">{{ t('dashboard.viewAll') }} <Icon name="chevron" :size="13" /></RouterLink>
       </div>
       <div class="tabs">
         <button
@@ -120,15 +124,15 @@ watch(() => route.query.action, (action) => {
           :class="{ active: activeTab === tab }"
           @click="activeTab = tab as typeof activeTab"
         >
-          {{ tab }}
+          {{ t(tab === 'Todas' ? 'common.all' : tab === 'Activas' ? 'common.active' : 'common.resolved') }}
           <span>({{ tab === 'Todas' ? userTickets.length : userTickets.filter((t) => t.status === (tab === 'Activas' ? 'Activa' : 'Resuelta')).length }})</span>
         </button>
       </div>
       <div class="ticket-list">
         <article v-for="ticket in filteredTickets" :key="ticket.id" class="ticket-row">
-          <img class="pet-image" :src="ticket.image" :alt="`Foto de ${ticket.name}`" />
+          <img class="pet-image" :src="ticket.image" :alt="t('common.reportPhotoAlt', { name: ticket.name })" />
           <div class="ticket-main">
-            <h3>{{ ticket.name }} <span class="status" :class="{ resolved: ticket.status === 'Resuelta' }">{{ ticket.kind }} · {{ ticket.status }}</span></h3>
+            <h3>{{ ticket.name }} <span class="status" :class="{ resolved: ticket.status === 'Resuelta' }">{{ reportKind(ticket.kind) }} · {{ reportStatus(ticket.status) }}</span></h3>
             <div class="ticket-meta">
               <span><Icon name="map" :size="11" /> {{ ticket.location }}</span>
               <span>{{ ticket.date }}</span>
@@ -138,31 +142,31 @@ watch(() => route.query.action, (action) => {
           <div class="ticket-tools">
             <div class="ticket-match">
               <div class="match-ring">{{ ticket.match }}%</div>
-              <span class="match-label">similitud</span>
+              <span class="match-label">{{ t('common.similarity') }}</span>
             </div>
-            <button class="text-button" @click="openEdit(ticket)">Editar</button>
-            <button class="text-button danger" @click="deleteTicket(ticket.id)">Eliminar</button>
+            <button class="text-button" @click="openEdit(ticket)">{{ t('dashboard.edit') }}</button>
+            <button class="text-button danger" @click="deleteTicket(ticket.id)">{{ t('dashboard.delete') }}</button>
           </div>
         </article>
-        <div v-if="filteredTickets.length === 0" class="empty-state">No encontramos reportes para esta cuenta.</div>
+        <div v-if="filteredTickets.length === 0" class="empty-state">{{ t('dashboard.noReports') }}</div>
       </div>
     </section>
 
     <aside class="side-panel">
       <div class="search-box">
         <Icon name="search" :size="16" />
-        <input v-model="search" type="search" placeholder="Buscar en mis reportes" aria-label="Buscar reportes" />
+        <input v-model="search" type="search" :placeholder="t('dashboard.searchMyReports')" :aria-label="t('accessibility.searchReports')" />
       </div>
       <section class="side-section">
         <div class="section-head">
-          <h3>Coincidencias recientes</h3>
-          <RouterLink to="/explorar">Ver todas</RouterLink>
+          <h3>{{ t('dashboard.recentMatches') }}</h3>
+          <RouterLink to="/explorar">{{ t('dashboard.viewAllMatches') }}</RouterLink>
         </div>
         <div v-for="ticket in userTickets.slice(0, 3)" :key="`match-${ticket.id}`" class="match-card">
           <img :src="ticket.image" :alt="ticket.name" />
           <div>
             <strong>{{ ticket.name }} · {{ ticket.location.split(' ')[0] }}</strong>
-            <small>{{ ticket.timeAgo }} · {{ ticket.type }}</small>
+            <small>{{ ticket.timeAgo }} · {{ petType(ticket.type) }}</small>
           </div>
           <span class="match-score">{{ ticket.match }}%</span>
         </div>
@@ -179,5 +183,5 @@ watch(() => route.query.action, (action) => {
     @saved="onModalSaved"
   />
 
-  <div v-if="showToast" class="success-toast">Cambios guardados correctamente.</div>
+  <div v-if="showToast" class="success-toast">{{ t('dashboard.toastSaved') }}</div>
 </template>

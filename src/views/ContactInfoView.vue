@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getCurrentUser } from '@/services/authService'
 import GoogleMapPicker from '@/components/GoogleMapPicker.vue'
 import type { ContactInfo } from '@/types'
@@ -7,6 +8,7 @@ import { getContactInfo, saveContactInfo as persistContactInfo } from '@/service
 import { countryCallingCodes } from '@/data/countryCallingCodes'
 
 const currentUser = getCurrentUser()
+const { t } = useI18n()
 type ContactForm = Omit<Partial<ContactInfo>, 'location'> & {
   latitude: number
   longitude: number
@@ -49,7 +51,7 @@ onMounted(async () => {
     } else {
       loadPhoneNumber(currentUser.phoneNumber)
     }
-  } catch { feedbackMessage.value = 'No se pudo cargar la información de contacto.' }
+  } catch { feedbackMessage.value = t('contactInfo.loadingError') }
 })
 
 function updateLocation(location: { latitude: number; longitude: number }) {
@@ -59,25 +61,25 @@ function updateLocation(location: { latitude: number; longitude: number }) {
 
 async function saveContactInfo() {
   if (!currentUser) {
-    feedbackMessage.value = 'Debes iniciar sesión para guardar tu información.'
+    feedbackMessage.value = t('contactInfo.loginRequired')
     return
   }
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   if (form.value.email && !emailRegex.test(form.value.email)) {
-    feedbackMessage.value = 'El formato del correo electrónico es inválido.'
+    feedbackMessage.value = t('contactInfo.invalidEmail')
     return
   }
   if (!/^\d{7,15}$/.test(form.value.phoneNumber || '')) {
-    feedbackMessage.value = 'Ingresa un número de teléfono válido de 7 a 15 dígitos.'
+    feedbackMessage.value = t('contactInfo.invalidPhone')
     return
   }
 
   loading.value = true
   try {
     await persistContactInfo({ ...form.value, phoneNumber: `${phonePrefix.value}${form.value.phoneNumber}`, userId: currentUser.id })
-    feedbackMessage.value = 'Información actualizada exitosamente.'
-  } catch { feedbackMessage.value = 'No se pudo guardar la información de contacto.'
+    feedbackMessage.value = t('contactInfo.saved')
+  } catch { feedbackMessage.value = t('contactInfo.saveError')
   } finally {
     loading.value = false
   }
@@ -86,25 +88,25 @@ async function saveContactInfo() {
 
 <template>
   <section class="page-view" data-tutorial="personal-info">
-    <div class="eyebrow">Mi Perfil</div>
-    <h1>Información de Contacto</h1>
-    <p class="page-intro">Configura la información que compartirás para contactar a otros usuarios o cuando visualicen tus reportes.</p>
+    <div class="eyebrow">{{ t('contactInfo.profile') }}</div>
+    <h1>{{ t('contactInfo.title') }}</h1>
+    <p class="page-intro">{{ t('contactInfo.intro') }}</p>
     
     <form class="auth-form" @submit.prevent="saveContactInfo" style="max-width: 600px; margin-top: 2rem;">
       <div class="form-field">
-        <label for="fullName">Nombre Completo (Opcional)</label>
-        <input id="fullName" v-model="form.fullName" type="text" placeholder="Ej. Juan Pérez" />
+        <label for="fullName">{{ t('contactInfo.fullName') }}</label>
+        <input id="fullName" v-model="form.fullName" type="text" :placeholder="t('contactInfo.namePlaceholder')" />
       </div>
       
       <div class="age-phone-grid">
         <div class="form-field">
-          <label for="age">Edad (Opcional)</label>
+          <label for="age">{{ t('contactInfo.age') }}</label>
           <input id="age" v-model="form.age" type="number" />
         </div>
         <div class="form-field">
-          <label for="phoneNumber">Teléfono</label>
+          <label for="phoneNumber">{{ t('common.phone') }}</label>
           <div class="phone-input">
-            <select v-model="phonePrefix" aria-label="Prefijo telefónico">
+            <select v-model="phonePrefix" :aria-label="t('contactInfo.phonePrefix')">
               <option v-for="country in countryCallingCodes" :key="`${country.name}-${country.code}`" :value="country.code">{{ country.name }} ({{ country.code }})</option>
             </select>
             <input id="phoneNumber" v-model="form.phoneNumber" type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="3001234567" pattern="[0-9]{7,15}" required />
@@ -113,12 +115,12 @@ async function saveContactInfo() {
       </div>
 
       <div class="form-field">
-        <label for="email">Correo Electrónico (Opcional)</label>
+        <label for="email">{{ t('contactInfo.email') }}</label>
         <input id="email" v-model="form.email" type="email" />
       </div>
 
       <div class="form-field">
-        <label>Ubicación General (Opcional)</label>
+        <label>{{ t('contactInfo.generalLocation') }}</label>
         <div class="map-wrap">
           <GoogleMapPicker
             :latitude="form.latitude"
@@ -133,7 +135,7 @@ async function saveContactInfo() {
       <p v-if="feedbackMessage" class="feedback-message">{{ feedbackMessage }}</p>
 
       <button type="submit" class="primary-button" :disabled="loading">
-        {{ loading ? 'Guardando...' : 'Guardar Información' }}
+        {{ loading ? t('contactInfo.saving') : t('contactInfo.save') }}
       </button>
     </form>
   </section>

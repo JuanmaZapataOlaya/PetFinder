@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getReportedNotifications } from '@/services/notificationService'
 import type { AppNotification } from '@/types'
 
 const notifications = ref<AppNotification[]>([])
+const { t, locale } = useI18n()
 const loading = ref(true)
 const error = ref('')
 const selectedNotification = ref<AppNotification | null>(null)
 
 function formatDate(timestamp: number): string {
-  return new Intl.DateTimeFormat('es-CO', {
+  return new Intl.DateTimeFormat(locale.value, {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(timestamp))
@@ -27,7 +29,7 @@ async function loadReportedNotifications() {
     notifications.value = await getReportedNotifications()
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    error.value = `No se pudieron cargar las notificaciones reportadas: ${message}`
+    error.value = `${t('admin.notificationLoadError')}: ${message}`
     console.error('Error completo:', err)
   } finally {
     loading.value = false
@@ -41,24 +43,24 @@ onMounted(loadReportedNotifications)
   <section class="page-view admin-page section-dashboard">
     <header class="section-heading">
       <div>
-        <div class="eyebrow">Panel de administración</div>
-        <h1>Notificaciones reportadas</h1>
-        <p>Notificaciones marcadas como reportadas por los usuarios.</p>
+        <div class="eyebrow">{{ t('admin.panel') }}</div>
+        <h1>{{ t('admin.reportedNotificationsTitle') }}</h1>
+        <p>{{ t('admin.reportedNotificationsIntro') }}</p>
       </div>
       <button class="reload-button" type="button" @click="loadReportedNotifications" :disabled="loading">
-        Actualizar
+        {{ t('admin.refresh') }}
       </button>
     </header>
 
-    <div v-if="loading" class="section-state">Cargando notificaciones reportadas…</div>
+    <div v-if="loading" class="section-state">{{ t('admin.loadingNotifications') }}</div>
 
     <div v-else-if="error" class="section-state error-state" role="alert">
       {{ error }}
-      <button @click="loadReportedNotifications">Reintentar</button>
+      <button @click="loadReportedNotifications">{{ t('common.retry') }}</button>
     </div>
 
     <div v-else-if="notifications.length === 0" class="section-state">
-      No hay notificaciones reportadas en este momento.
+      {{ t('admin.noReportedNotificationsCurrent') }}
     </div>
 
     <div v-else class="notifications-table-container">
@@ -67,11 +69,11 @@ onMounted(loadReportedNotifications)
           <thead>
             <tr>
               <th>ID</th>
-              <th>Título</th>
-              <th>Remitente</th>
-              <th>Motivo del reporte</th>
-              <th>Fecha</th>
-              <th>Estado</th>
+              <th>{{ t('admin.title') }}</th>
+              <th>{{ t('admin.sender') }}</th>
+              <th>{{ t('admin.reason') }}</th>
+              <th>{{ t('admin.date') }}</th>
+              <th>{{ t('admin.state') }}</th>
               <th></th>
             </tr>
           </thead>
@@ -81,22 +83,22 @@ onMounted(loadReportedNotifications)
               <td class="col-title">
                 <div class="title-content">
                   {{ notification.title }}
-                  <small v-if="notification.reportId">Reporte #{{ notification.reportId }}</small>
+                  <small v-if="notification.reportId">{{ t('admin.report') }} #{{ notification.reportId }}</small>
                 </div>
               </td>
-              <td class="col-sender">{{ notification.senderName || 'No indicado' }}</td>
+              <td class="col-sender">{{ notification.senderName || t('admin.notIndicated') }}</td>
               <td class="col-reason">
-                <span :title="notification.reasonOfReport || 'Sin motivo'">
-                  {{ truncateText(notification.reasonOfReport || 'Sin especificar', 60) }}
+                <span :title="notification.reasonOfReport || t('admin.noReason')">
+                  {{ truncateText(notification.reasonOfReport || t('common.notSpecified'), 60) }}
                 </span>
               </td>
               <td class="col-date">{{ formatDate(notification.createdAt) }}</td>
               <td class="col-status">
-                <span class="status-badge status-reported">Reportada</span>
+                <span class="status-badge status-reported">{{ t('notifications.reported') }}</span>
               </td>
               <td class="col-action">
                 <button class="view-button" type="button" @click="selectedNotification = notification">
-                  Ver detalles
+                  {{ t('admin.viewDetails') }}
                 </button>
               </td>
             </tr>
@@ -106,71 +108,71 @@ onMounted(loadReportedNotifications)
     </div>
 
     <div v-if="selectedNotification" class="detail-overlay" role="presentation" @click.self="selectedNotification = null">
-      <section class="detail-dialog" role="dialog" aria-modal="true" :aria-label="`Notificación reportada ${selectedNotification.id}`">
+      <section class="detail-dialog" role="dialog" aria-modal="true" :aria-label="`${t('admin.notification')} ${selectedNotification.id}`">
         <header>
           <div>
-            <div class="eyebrow">Notificación #{{ selectedNotification.id }}</div>
+            <div class="eyebrow">{{ t('admin.notification') }} #{{ selectedNotification.id }}</div>
             <h2>{{ selectedNotification.title }}</h2>
           </div>
-          <button class="close-button" type="button" aria-label="Cerrar" @click="selectedNotification = null">×</button>
+          <button class="close-button" type="button" :aria-label="t('common.close')" @click="selectedNotification = null">×</button>
         </header>
 
         <dl class="detail-list">
           <div>
-            <dt>ID de notificación</dt>
+            <dt>{{ t('admin.notificationId') }}</dt>
             <dd>{{ selectedNotification.id }}</dd>
           </div>
           <div>
-            <dt>Tipo</dt>
+            <dt>{{ t('admin.type') }}</dt>
             <dd>{{ selectedNotification.type }}</dd>
           </div>
           <div>
-            <dt>Remitente</dt>
-            <dd>{{ selectedNotification.senderName || 'No indicado' }}</dd>
+            <dt>{{ t('admin.sender') }}</dt>
+            <dd>{{ selectedNotification.senderName || t('admin.notIndicated') }}</dd>
           </div>
           <div>
-            <dt>Receptor</dt>
+            <dt>{{ t('admin.recipient') }}</dt>
             <dd>{{ selectedNotification.recipientUserId }}</dd>
           </div>
           <div>
-            <dt>Reporte asociado</dt>
+            <dt>{{ t('admin.associatedReport') }}</dt>
             <dd>#{{ selectedNotification.reportId }}</dd>
           </div>
           <div>
-            <dt>Fecha de creación</dt>
+            <dt>{{ t('admin.createdAt') }}</dt>
             <dd>{{ formatDate(selectedNotification.createdAt) }}</dd>
           </div>
           <div>
-            <dt>Estado de lectura</dt>
-            <dd>{{ selectedNotification.read ? 'Leída' : 'No leída' }}</dd>
+            <dt>{{ t('admin.readState') }}</dt>
+            <dd>{{ selectedNotification.read ? t('notifications.read') : t('notifications.unread') }}</dd>
           </div>
           <div class="detail-full">
-            <dt>Contenido</dt>
+            <dt>{{ t('admin.content') }}</dt>
             <dd>{{ selectedNotification.message || selectedNotification.title }}</dd>
           </div>
           <div class="detail-full">
-            <dt>Motivo del reporte</dt>
-            <dd class="reason-text">{{ selectedNotification.reasonOfReport || 'Sin especificar' }}</dd>
+            <dt>{{ t('admin.reason') }}</dt>
+            <dd class="reason-text">{{ selectedNotification.reasonOfReport || t('common.notSpecified') }}</dd>
           </div>
           <div v-if="selectedNotification.senderPhone">
-            <dt>Teléfono del remitente</dt>
+            <dt>{{ t('admin.senderPhone') }}</dt>
             <dd>{{ selectedNotification.senderPhone }}</dd>
           </div>
           <div v-if="selectedNotification.senderEmail">
-            <dt>Email del remitente</dt>
+            <dt>{{ t('admin.senderEmail') }}</dt>
             <dd>{{ selectedNotification.senderEmail }}</dd>
           </div>
         </dl>
 
         <div v-if="selectedNotification.petImage" class="image-section">
-          <h3>Imagen de mascota</h3>
+          <h3>{{ t('admin.petImage') }}</h3>
           <a :href="selectedNotification.petImage" target="_blank" rel="noopener noreferrer">
-            <img :src="selectedNotification.petImage" alt="Imagen de mascota" />
+            <img :src="selectedNotification.petImage" :alt="t('admin.petImage')" />
           </a>
         </div>
 
         <div v-if="selectedNotification.evidenceImages?.length" class="image-section">
-          <h3>Evidencias adjuntas ({{ selectedNotification.evidenceImages.length }})</h3>
+          <h3>{{ t('admin.attachedEvidence', { count: selectedNotification.evidenceImages.length }) }}</h3>
           <div class="evidence-grid">
             <a
               v-for="(image, index) in selectedNotification.evidenceImages"
@@ -180,8 +182,8 @@ onMounted(loadReportedNotifications)
               rel="noopener noreferrer"
               class="evidence-item"
             >
-              <img :src="image.url" :alt="`Evidencia ${index + 1}`" />
-              <span>Ver evidencia {{ index + 1 }}</span>
+              <img :src="image.url" :alt="t('common.evidenceAlt', { index: index + 1 })" />
+              <span>{{ t('admin.viewEvidence', { index: index + 1 }) }}</span>
             </a>
           </div>
         </div>

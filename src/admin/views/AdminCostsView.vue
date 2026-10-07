@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import VChart from 'vue-echarts'
 import '@/admin/charts/echarts'
 import { getCostsDashboard } from '@/admin/services/adminApi'
@@ -40,6 +41,7 @@ interface CostsData {
 }
 
 const period = ref(30)
+const { t, locale } = useI18n()
 const range = computed(() => ({
   p_from: new Date(Date.now() - period.value * 86400000).toISOString(),
   p_to: new Date().toISOString(),
@@ -52,7 +54,7 @@ async function reload() {
 }
 
 onMounted(reload)
-const currency = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'USD', maximumFractionDigits: 6 })
+const currency = computed(() => new Intl.NumberFormat(locale.value, { style: 'currency', currency: 'USD', maximumFractionDigits: 6 }))
 
 const data = computed(() => query.data.value as CostsData | null)
 const loading = computed(() => query.loading.value)
@@ -62,17 +64,17 @@ const modelOption = computed(() => {
   const rows = data.value?.modelCosts ?? []
   const grouped = new Map<string, number>()
   for (const row of rows) {
-    const label = `${row.provider || 'Proveedor'} · ${row.model || row.stage || 'Modelo'}`
+    const label = `${row.provider || t('admin.provider')} · ${row.model || row.stage || t('admin.model')}`
     grouped.set(label, (grouped.get(label) ?? 0) + (Number(row.cost_usd) || 0))
   }
   const entries = [...grouped.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15)
   return {
     color: ['#5f8fc4'],
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: (value: number) => currency.format(value) },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: (value: number) => currency.value.format(value) },
     grid: { left: 45, right: 18, top: 18, bottom: 75, containLabel: true },
     xAxis: { type: 'category', data: entries.map(([label]) => label), axisLabel: { rotate: 24 } },
     yAxis: { type: 'value', name: 'USD' },
-    series: [{ name: 'Costo', type: 'bar', barMaxWidth: 42, data: entries.map(([, total]) => total) }],
+    series: [{ name: t('admin.usdCost'), type: 'bar', barMaxWidth: 42, data: entries.map(([, total]) => total) }],
   }
 })
 
@@ -84,50 +86,50 @@ const validationOption = computed(() => {
     { name: 'Agente', value: rows.reduce((sum, row) => sum + (Number(row.agent_cost) || 0), 0) },
   ]
   return {
-    tooltip: { trigger: 'item', formatter: (item: { name: string; value: number; percent: number }) => `${item.name}: ${currency.format(item.value)} (${item.percent}%)` },
+    tooltip: { trigger: 'item', formatter: (item: { name: string; value: number; percent: number }) => `${item.name}: ${currency.value.format(item.value)} (${item.percent}%)` },
     legend: { bottom: 0 },
     color: ['#e57959', '#d6a344', '#77a661'],
-    series: [{ name: 'Costos de validación', type: 'pie', radius: ['40%', '68%'], data: sums }],
+    series: [{ name: t('admin.validationCost'), type: 'pie', radius: ['40%', '68%'], data: sums }],
   }
 })
 
 function tokens(value: number | null) {
-  return (value ?? 0).toLocaleString('es-CO')
+  return (value ?? 0).toLocaleString(locale.value)
 }
 </script>
 
 <template>
   <section class="page-view admin-page section-dashboard">
     <header class="section-heading">
-      <div><div class="eyebrow">Panel de administración</div><h1>Costos de modelos</h1><p>Uso de modelos, servicios y validaciones de reclamos registrados en el periodo.</p></div>
-      <label>Periodo
-        <select v-model.number="period" :disabled="loading" @change="reload"><option :value="7">7 días</option><option :value="30">30 días</option><option :value="90">90 días</option><option :value="365">12 meses</option></select>
+      <div><div class="eyebrow">{{ t('admin.panel') }}</div><h1>{{ t('admin.costsTitle') }}</h1><p>{{ t('admin.costsIntro') }}</p></div>
+      <label>{{ t('admin.period') }}
+        <select v-model.number="period" :disabled="loading" @change="reload"><option :value="7">{{ t('admin.days7') }}</option><option :value="30">{{ t('admin.days30') }}</option><option :value="90">{{ t('admin.days90') }}</option><option :value="365">{{ t('admin.months12') }}</option></select>
       </label>
     </header>
-    <div v-if="loading" class="section-state">Cargando tablas de costos…</div>
-    <div v-else-if="error" class="section-state error-state" role="alert">{{ error }} <button @click="reload">Reintentar</button></div>
+    <div v-if="loading" class="section-state">{{ t('admin.loadingCosts') }}</div>
+    <div v-else-if="error" class="section-state error-state" role="alert">{{ error }} <button @click="reload">{{ t('common.retry') }}</button></div>
     <template v-else-if="data">
       <div class="admin-kpi-grid cost-kpis">
-        <article class="admin-kpi-card"><div class="admin-kpi-label">Costo de modelos</div><strong>{{ currency.format(Number(data.summary.totalUsd)) }}</strong><p>{{ data.summary.modelRows }} registros en admin_model_costs_rows</p></article>
-        <article class="admin-kpi-card"><div class="admin-kpi-label">Validaciones</div><strong>{{ data.summary.claimValidations }}</strong><p>Filas de claim_validation_costs</p></article>
-        <article class="admin-kpi-card"><div class="admin-kpi-label">Costo de validaciones</div><strong>{{ currency.format(Number(data.summary.claimUsd)) }}</strong><p>Guardrails y agente principal</p></article>
+        <article class="admin-kpi-card"><div class="admin-kpi-label">{{ t('admin.modelCost') }}</div><strong>{{ currency.format(Number(data.summary.totalUsd)) }}</strong><p>{{ data.summary.modelRows }} {{ t('admin.modelRows') }}</p></article>
+        <article class="admin-kpi-card"><div class="admin-kpi-label">{{ t('admin.validation') }}</div><strong>{{ data.summary.claimValidations }}</strong><p>{{ t('admin.validationRows') }}</p></article>
+        <article class="admin-kpi-card"><div class="admin-kpi-label">{{ t('admin.validationCost') }}</div><strong>{{ currency.format(Number(data.summary.claimUsd)) }}</strong><p>{{ t('admin.guardrailsAgent') }}</p></article>
       </div>
       <div class="section-chart-grid">
-        <article class="admin-chart-card"><header><div><h2>Costo por proveedor y modelo</h2><p>Principales costos acumulados · USD</p></div></header><VChart v-if="data.modelCosts.length" class="admin-chart" :option="modelOption" autoresize /><div v-else class="admin-chart-message">Sin costos de modelos en el periodo.</div></article>
-        <article class="admin-chart-card"><header><div><h2>Desglose de validaciones</h2><p>Guardrails y agente principal · USD</p></div></header><VChart v-if="data.claimValidationCosts.length" class="admin-chart" :option="validationOption" autoresize /><div v-else class="admin-chart-message">Sin costos de validación en el periodo.</div></article>
+        <article class="admin-chart-card"><header><div><h2>{{ t('admin.modelProviderCost') }}</h2><p>{{ t('admin.topCosts') }}</p></div></header><VChart v-if="data.modelCosts.length" class="admin-chart" :option="modelOption" autoresize /><div v-else class="admin-chart-message">{{ t('admin.noModelCosts') }}</div></article>
+        <article class="admin-chart-card"><header><div><h2>{{ t('admin.validationBreakdown') }}</h2><p>{{ t('admin.guardrailsAgent') }}</p></div></header><VChart v-if="data.claimValidationCosts.length" class="admin-chart" :option="validationOption" autoresize /><div v-else class="admin-chart-message">{{ t('admin.noValidationCosts') }}</div></article>
       </div>
 
-      <article class="admin-chart-card data-table"><header><div><h2>admin_model_costs_rows</h2><p>Registro de modelo, proveedor, tokens, costo y momento de uso.</p></div></header>
-        <div v-if="!data.modelCosts.length" class="admin-chart-message">No hay registros para este periodo.</div>
-        <div v-else class="table-scroll"><table><thead><tr><th>Fecha</th><th>Fuente</th><th>Funcionalidad</th><th>Etapa</th><th>Proveedor</th><th>Modelo</th><th>Tokens entrada</th><th>Tokens salida</th><th>Costo USD</th></tr></thead><tbody>
-          <tr v-for="(row, index) in data.modelCosts" :key="`${row.source}-${index}`"><td>{{ new Date(row.created_at).toLocaleString('es-CO') }}</td><td>{{ row.source }}</td><td>{{ row.feature }}</td><td>{{ row.stage || '—' }}</td><td>{{ row.provider || '—' }}</td><td>{{ row.model || '—' }}</td><td>{{ tokens(row.input_tokens) }}</td><td>{{ tokens(row.output_tokens) }}</td><td>{{ row.cost_usd === null ? 'Sin tarifa' : currency.format(Number(row.cost_usd)) }}</td></tr>
+      <article class="admin-chart-card data-table"><header><div><h2>admin_model_costs_rows</h2><p>{{ t('admin.modelRowsIntro') }}</p></div></header>
+        <div v-if="!data.modelCosts.length" class="admin-chart-message">{{ t('admin.noPeriodRecords') }}</div>
+        <div v-else class="table-scroll"><table><thead><tr><th>{{ t('admin.date') }}</th><th>{{ t('admin.source') }}</th><th>{{ t('admin.feature') }}</th><th>{{ t('admin.stage') }}</th><th>{{ t('admin.provider') }}</th><th>{{ t('admin.model') }}</th><th>{{ t('admin.inputTokens') }}</th><th>{{ t('admin.outputTokens') }}</th><th>{{ t('admin.usdCost') }}</th></tr></thead><tbody>
+          <tr v-for="(row, index) in data.modelCosts" :key="`${row.source}-${index}`"><td>{{ new Date(row.created_at).toLocaleString(locale) }}</td><td>{{ row.source }}</td><td>{{ row.feature }}</td><td>{{ row.stage || '—' }}</td><td>{{ row.provider || '—' }}</td><td>{{ row.model || '—' }}</td><td>{{ tokens(row.input_tokens) }}</td><td>{{ tokens(row.output_tokens) }}</td><td>{{ row.cost_usd === null ? t('admin.noRate') : currency.format(Number(row.cost_usd)) }}</td></tr>
         </tbody></table></div>
       </article>
 
-      <article class="admin-chart-card data-table"><header><div><h2>claim_validation_costs</h2><p>Tokens y costos de cada guardrail y agente.</p></div></header>
-        <div v-if="!data.claimValidationCosts.length" class="admin-chart-message">No hay registros para este periodo.</div>
-        <div v-else class="table-scroll"><table><thead><tr><th>Fecha</th><th>ID</th><th>Notificación</th><th>Guard input</th><th>Guard output</th><th>Guard USD</th><th>Guardrail 1 USD</th><th>Guardrail 2 USD</th><th>Agente input</th><th>Agente output</th><th>Agente USD</th></tr></thead><tbody>
-          <tr v-for="row in data.claimValidationCosts" :key="row.id"><td>{{ new Date(row.created_at).toLocaleString('es-CO') }}</td><td>{{ row.id }}</td><td>{{ row.notification_id || '—' }}</td><td>{{ tokens(row.guard_input_tokens) }}</td><td>{{ tokens(row.guard_output_tokens) }}</td><td>{{ currency.format(Number(row.guard_cost) || 0) }}</td><td>{{ currency.format(Number(row.guardrail_1_cost) || 0) }}</td><td>{{ currency.format(Number(row.guardrail_2_cost) || 0) }}</td><td>{{ tokens(row.agent_input_tokens) }}</td><td>{{ tokens(row.agent_output_tokens) }}</td><td>{{ currency.format(Number(row.agent_cost) || 0) }}</td></tr>
+      <article class="admin-chart-card data-table"><header><div><h2>claim_validation_costs</h2><p>{{ t('admin.validationRowsIntro') }}</p></div></header>
+        <div v-if="!data.claimValidationCosts.length" class="admin-chart-message">{{ t('admin.noPeriodRecords') }}</div>
+        <div v-else class="table-scroll"><table><thead><tr><th>{{ t('admin.date') }}</th><th>ID</th><th>{{ t('admin.notification') }}</th><th>{{ t('admin.guardInput') }}</th><th>{{ t('admin.guardOutput') }}</th><th>{{ t('admin.guardUsd') }}</th><th>{{ t('admin.guardrail1Usd') }}</th><th>{{ t('admin.guardrail2Usd') }}</th><th>{{ t('admin.agentInput') }}</th><th>{{ t('admin.agentOutput') }}</th><th>{{ t('admin.agentUsd') }}</th></tr></thead><tbody>
+          <tr v-for="row in data.claimValidationCosts" :key="row.id"><td>{{ new Date(row.created_at).toLocaleString(locale) }}</td><td>{{ row.id }}</td><td>{{ row.notification_id || '—' }}</td><td>{{ tokens(row.guard_input_tokens) }}</td><td>{{ tokens(row.guard_output_tokens) }}</td><td>{{ currency.format(Number(row.guard_cost) || 0) }}</td><td>{{ currency.format(Number(row.guardrail_1_cost) || 0) }}</td><td>{{ currency.format(Number(row.guardrail_2_cost) || 0) }}</td><td>{{ tokens(row.agent_input_tokens) }}</td><td>{{ tokens(row.agent_output_tokens) }}</td><td>{{ currency.format(Number(row.agent_cost) || 0) }}</td></tr>
         </tbody></table></div>
       </article>
     </template>

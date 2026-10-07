@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { marked } from 'marked'
 import { finalizeNotification, getNotifications, updateNotificationRead, reportNotification } from '@/services/notificationService'
 import { getCurrentUser } from '@/services/authService'
@@ -7,6 +8,7 @@ import { useNotificationCommands, type NotificationCommand, type NotificationCom
 import type { AppNotification } from '@/types'
 
 const currentUser = getCurrentUser()
+const { t, locale } = useI18n()
 const notifications = ref<AppNotification[]>([])
 const loading = ref(true)
 const error = ref('')
@@ -24,7 +26,7 @@ function renderMarkdown(markdown: string): string {
 }
 
 function formatDate(timestamp: number): string {
-  return new Intl.DateTimeFormat('es-CO', {
+  return new Intl.DateTimeFormat(locale.value, {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(timestamp))
@@ -32,7 +34,7 @@ function formatDate(timestamp: number): string {
 
 function notificationDescription(notification: AppNotification): string {
   if (notification.message) return notification.message
-  return `${notification.senderName || 'Un usuario'} quiere ponerse en contacto contigo por tu publicación.`
+  return t('notifications.defaultMessage', { sender: notification.senderName || t('account.user') })
 }
 
 function handlePetImageError(event: Event) {
@@ -50,7 +52,7 @@ async function updateReadState(notification: AppNotification, read: boolean) {
 
   if (!result.success) {
     notification.read = previousState
-    error.value = result.error || 'No se pudo actualizar la notificación.'
+    error.value = result.error || t('notifications.updateError')
   }
 }
 
@@ -61,7 +63,7 @@ async function saveInHistory(notification: AppNotification) {
   if (result.success) {
     notifications.value = notifications.value.filter((item) => item.id !== notification.id)
   } else {
-    error.value = result.error || 'No se pudo marcar el reporte como finalizado.'
+    error.value = result.error || t('notifications.finalizeError')
   }
   finalizingId.value = null
 }
@@ -84,7 +86,7 @@ function closeReportModal() {
 
 function getReasonValidationError(): string {
   if (!reportReason.value || reportReason.value.trim() === '') {
-    return 'Por favor ingresa un motivo para reportar esta notificación.'
+    return t('notifications.reasonRequired')
   }
   return ''
 }
@@ -112,10 +114,10 @@ async function submitReport() {
       }
       setTimeout(closeReportModal, 1500)
     } else {
-      reportError.value = result.error || 'No se pudo reportar la notificación. Intenta de nuevo.'
+      reportError.value = result.error || t('notifications.reportError')
     }
   } catch (err) {
-    reportError.value = 'Error al reportar la notificación. Intenta de nuevo.'
+    reportError.value = t('notifications.unexpectedReportError')
   }
 }
 
@@ -167,7 +169,7 @@ onMounted(async () => {
   try {
     if (currentUser) notifications.value = await getNotifications(currentUser.id)
   } catch {
-    error.value = 'No se pudieron cargar las notificaciones.'
+    error.value = t('notifications.loadError')
   } finally {
     loading.value = false
   }
@@ -177,13 +179,13 @@ onMounted(async () => {
 <template>
   <section class="page-view notifications-view">
     <header class="notifications-heading" data-tutorial="notifications">
-      <div class="eyebrow">Actividad</div>
-      <h1>Mis notificaciones</h1>
-      <p class="page-intro">Revisa las solicitudes y mensajes relacionados con tus reportes.</p>
+      <div class="eyebrow">{{ t('notifications.activity') }}</div>
+      <h1>{{ t('notifications.title') }}</h1>
+      <p class="page-intro">{{ t('notifications.intro') }}</p>
     </header>
 
     <div v-if="loading" class="notifications-state" aria-live="polite">
-      <span class="loading-spinner" aria-hidden="true" /> Cargando notificaciones...
+      <span class="loading-spinner" aria-hidden="true" /> {{ t('notifications.loading') }}
     </div>
 
     <div v-else-if="error" class="notifications-state notifications-error" role="alert">
@@ -191,7 +193,7 @@ onMounted(async () => {
     </div>
 
     <div v-else-if="notifications.length === 0" class="notifications-state">
-      No tienes notificaciones recientes.
+      {{ t('notifications.empty') }}
     </div>
 
     <div v-else class="notifications-list">
@@ -204,10 +206,10 @@ onMounted(async () => {
         <div class="notification-card__pet">
           <img
             :src="notification.petImage || defaultPetImage"
-            :alt="`Mascota del reporte ${notification.reportId ? `#${notification.reportId}` : ''}`"
+            :alt="t('common.petReportImageAlt', { reportId: notification.reportId || '' })"
             @error="handlePetImageError"
           />
-          <span>Interés en esta mascota</span>
+          <span>{{ t('notifications.interest') }}</span>
         </div>
         <div class="notification-card__header">
           <div class="notification-card__title">
@@ -215,33 +217,33 @@ onMounted(async () => {
             <h2>{{ notification.title }}</h2>
           </div>
           <span class="notification-badge" :class="{ 'notification-badge--read': notification.read }">
-            {{ notification.read ? 'Leída' : 'No leída' }}
+            {{ notification.read ? t('notifications.read') : t('notifications.unread') }}
           </span>
         </div>
 
         <p class="notification-card__description">{{ notificationDescription(notification) }}</p>
         <div v-if="notification.agentReport" class="notification-analysis">
-          <strong>Análisis de las fotografías</strong>
+          <strong>{{ t('notifications.photoAnalysis') }}</strong>
           <div v-html="renderMarkdown(notification.agentReport)" class="notification-analysis__content" />
         </div>
         <div v-if="notification.evidenceImages?.length" class="notification-evidence">
-          <strong>Evidencia adjunta</strong>
+          <strong>{{ t('notifications.attachedEvidence') }}</strong>
           <div class="notification-evidence__images">
             <a v-for="(image, index) in notification.evidenceImages || []" :key="image.path" :href="image.url" target="_blank" rel="noopener">
-              <img :src="image.url" :alt="`Evidencia ${index + 1} de la notificación`" />
+              <img :src="image.url" :alt="t('common.evidenceAlt', { index: index + 1 })" />
             </a>
           </div>
         </div>
 
         <div class="notification-card__meta">
-          <span v-if="notification.senderName"><strong>Remitente:</strong> {{ notification.senderName }}</span>
-          <span><strong>Fecha:</strong> {{ formatDate(notification.createdAt) }}</span>
-          <span v-if="notification.reportId"><strong>Reporte:</strong> #{{ notification.reportId }}</span>
+          <span v-if="notification.senderName"><strong>{{ t('notifications.sender') }}:</strong> {{ notification.senderName }}</span>
+          <span><strong>{{ t('notifications.date') }}:</strong> {{ formatDate(notification.createdAt) }}</span>
+          <span v-if="notification.reportId"><strong>{{ t('common.report') }}:</strong> #{{ notification.reportId }}</span>
         </div>
 
         <div class="notification-card__contact">
-          <span v-if="notification.senderPhone"><strong>Teléfono:</strong> {{ notification.senderPhone }}</span>
-          <span v-if="notification.senderEmail"><strong>Email:</strong> {{ notification.senderEmail }}</span>
+          <span v-if="notification.senderPhone"><strong>{{ t('notifications.phone') }}:</strong> {{ notification.senderPhone }}</span>
+          <span v-if="notification.senderEmail"><strong>{{ t('common.email') }}:</strong> {{ notification.senderEmail }}</span>
         </div>
 
         <div class="notification-card__actions">
@@ -251,7 +253,7 @@ onMounted(async () => {
             :disabled="finalizingId === notification.id"
             @click="saveInHistory(notification)"
           >
-            Marcar como finalizado
+            {{ t('notifications.markFinalized') }}
           </button>
           
           <button
@@ -260,7 +262,7 @@ onMounted(async () => {
             :disabled="notification.read"
             @click="updateReadState(notification, true)"
           >
-            Marcar como leída
+            {{ t('notifications.markRead') }}
           </button>
           
           <button
@@ -269,7 +271,7 @@ onMounted(async () => {
             :disabled="!notification.read"
             @click="updateReadState(notification, false)"
           >
-            Desmarcar
+            {{ t('notifications.markUnread') }}
           </button>
           
           <button
@@ -278,7 +280,7 @@ onMounted(async () => {
             :disabled="notification.reported"
             @click="openReportModal(notification)"
           >
-            {{ notification.reported ? 'Reportada' : 'Reportar' }}
+            {{ notification.reported ? t('notifications.reported') : t('notifications.report') }}
           </button>
 
         </div>
@@ -288,17 +290,17 @@ onMounted(async () => {
     <div v-if="reportModalOpen" class="report-modal-overlay" role="presentation" @click.self="closeReportModal">
       <section class="report-modal" role="dialog" aria-modal="true" aria-labelledby="report-modal-title">
         <header class="report-modal__header">
-          <h2 id="report-modal-title">Reportar notificación</h2>
-          <button class="report-modal__close" type="button" aria-label="Cerrar" @click="closeReportModal">×</button>
+          <h2 id="report-modal-title">{{ t('notifications.reportTitle') }}</h2>
+          <button class="report-modal__close" type="button" :aria-label="t('common.close')" @click="closeReportModal">×</button>
         </header>
 
         <div class="report-modal__content">
           <label class="report-modal__label">
-            <span>Motivo del reporte</span>
+            <span>{{ t('notifications.reportReason') }}</span>
             <textarea
               v-model="reportReason"
               class="report-modal__textarea"
-              placeholder="Cuéntanos por qué reportas esta notificación..."
+              :placeholder="t('notifications.reportPlaceholder')"
               rows="5"
             />
           </label>
@@ -308,7 +310,7 @@ onMounted(async () => {
           </div>
 
           <div v-if="reportSuccess" class="report-modal__success" role="status">
-            ✓ Notificación reportada correctamente
+            ✓ {{ t('notifications.reportSent') }}
           </div>
         </div>
 
@@ -319,7 +321,7 @@ onMounted(async () => {
             @click="closeReportModal"
             :disabled="reportSuccess"
           >
-            Cancelar
+            {{ t('common.cancel') }}
           </button>
           <button
             type="button"
@@ -327,7 +329,7 @@ onMounted(async () => {
             @click="submitReport"
             :disabled="reportSuccess"
           >
-            Enviar
+            {{ t('notifications.submit') }}
           </button>
         </div>
       </section>

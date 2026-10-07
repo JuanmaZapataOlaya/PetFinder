@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import KpiCard from '@/admin/components/KpiCard.vue'
 import { getOverviewKpis } from '@/admin/services/adminApi'
 import type { OverviewKpis } from '@/admin/types'
@@ -8,6 +9,7 @@ import { useAdminQuery } from '@/admin/composables/useAdminQuery'
 
 const from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
 const to = new Date().toISOString()
+const { t } = useI18n()
 const overviewQuery = useAdminQuery<OverviewKpis | null>(() => getOverviewKpis(from, to))
 const loading = computed(() => overviewQuery.loading.value)
 const kpis = computed(() => overviewQuery.data.value)
@@ -23,28 +25,28 @@ onMounted(load)
   <section class="page-view admin-page">
     <div class="content-head">
       <div class="head-copy">
-        <div class="eyebrow">Panel de administración</div>
-        <h1>Resumen</h1>
-        <p>Vista general de la plataforma. Abre una sección para consultar sus métricas y registros detallados.</p>
+        <div class="eyebrow">{{ t('admin.panel') }}</div>
+        <h1>{{ t('admin.overview') }}</h1>
+        <p>{{ t('admin.overviewIntro') }}</p>
       </div>
     </div>
     <div class="admin-kpi-grid">
-      <KpiCard label="Publicaciones activas" :value="kpis?.tickets_activos || 0" help="Publicaciones con estado Activa actualmente." :loading="loading" />
-      <KpiCard label="Nuevas publicaciones" :value="kpis?.tickets_nuevos || 0" help="Publicaciones creadas dentro del periodo seleccionado." :loading="loading" />
-      <KpiCard label="Resueltas en periodo" :value="kpis?.tickets_resueltos_periodo || 0" help="Publicaciones cuyo resolved_at cae dentro del periodo." :loading="loading" />
-      <KpiCard label="Reclamos pendientes" :value="kpis?.reclamos_pendientes || 0" help="Reclamos que siguen en estado pendiente." :loading="loading" />
-      <KpiCard label="Usuarios nuevos" :value="kpis?.usuarios_nuevos || 0" help="Perfiles creados dentro del periodo seleccionado." :loading="loading" />
-      <KpiCard label="Denuncias pendientes" :value="kpis?.reportes_pendientes || 0" help="Denuncias que aún no han sido revisadas." :loading="loading" />
+      <KpiCard :label="t('admin.activePublications')" :value="kpis?.tickets_activos || 0" :help="t('admin.activePublicationsHelp')" :loading="loading" />
+      <KpiCard :label="t('admin.newPublications')" :value="kpis?.tickets_nuevos || 0" :help="t('admin.newPublicationsHelp')" :loading="loading" />
+      <KpiCard :label="t('admin.resolvedInPeriod')" :value="kpis?.tickets_resueltos_periodo || 0" :help="t('admin.resolvedInPeriodHelp')" :loading="loading" />
+      <KpiCard :label="t('admin.pendingClaims')" :value="kpis?.reclamos_pendientes || 0" :help="t('admin.pendingClaimsHelp')" :loading="loading" />
+      <KpiCard :label="t('admin.newUsers')" :value="kpis?.usuarios_nuevos || 0" :help="t('admin.newUsersHelp')" :loading="loading" />
+      <KpiCard :label="t('admin.pendingReports')" :value="kpis?.reportes_pendientes || 0" :help="t('admin.pendingReportsHelp')" :loading="loading" />
     </div>
     <div v-if="overviewQuery.error.value" class="summary-error" role="alert">
-      {{ overviewQuery.error.value }} <button type="button" @click="load">Reintentar</button>
+      {{ overviewQuery.error.value }} <button type="button" @click="load">{{ t('common.retry') }}</button>
     </div>
-    <nav class="section-links" aria-label="Secciones administrativas">
-      <RouterLink to="/admin/reclamos"><strong>Tickets y reclamos</strong><span>Actividad, reclamos y características de mascotas</span></RouterLink>
-      <RouterLink to="/admin/reportes"><strong>Fraude y reportes</strong><span>Casos reportados por usuarios y evidencias</span></RouterLink>
-      <RouterLink to="/admin/costos"><strong>Costos de modelos</strong><span>Consumo de modelos y validaciones</span></RouterLink>
-      <RouterLink to="/admin/usuarios"><strong>Usuarios y roles</strong><span>Perfiles, contacto, roles y gestión de cuentas</span></RouterLink>
-      <RouterLink to="/admin/auditoria"><strong>Auditoría</strong><span>Registro de acciones y eventos</span></RouterLink>
+    <nav class="section-links" :aria-label="t('accessibility.reportedSections')">
+      <RouterLink to="/admin/reclamos"><strong>{{ t('admin.ticketsAndClaims') }}</strong><span>{{ t('admin.ticketsAndClaimsHelp') }}</span></RouterLink>
+      <RouterLink to="/admin/reportes"><strong>{{ t('navigation.fraudAndReports') }}</strong><span>{{ t('admin.fraudAndReportsHelp') }}</span></RouterLink>
+      <RouterLink to="/admin/costos"><strong>{{ t('admin.costsTitle') }}</strong><span>{{ t('admin.modelCostsHelp') }}</span></RouterLink>
+      <RouterLink to="/admin/usuarios"><strong>{{ t('admin.usersAndRoles') }}</strong><span>{{ t('admin.usersRolesHelp') }}</span></RouterLink>
+      <RouterLink to="/admin/auditoria"><strong>{{ t('admin.audit') }}</strong><span>{{ t('admin.auditHelp') }}</span></RouterLink>
     </nav>
   </section>
 </template>
