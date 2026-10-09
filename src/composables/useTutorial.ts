@@ -1,61 +1,53 @@
 import { nextTick, onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter, type RouteRecordName } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { driver, type Driver } from 'driver.js'
 import 'driver.js/dist/driver.css'
 
 interface TutorialStep {
-  title: string
-  description: string
+  translationKey: string
   element: string
   route: RouteRecordName
 }
 
 const tutorialSteps: TutorialStep[] = [
   {
-    title: 'Resumen',
-    description: 'Aquí encontrarás una vista general con la información más importante y la actividad reciente.',
+    translationKey: 'summary',
     element: '[data-tutorial="summary"]',
     route: 'summary',
   },
   {
-    title: 'Busca reportes',
-    description: 'Escribe en la barra de búsqueda y filtra por especie o por reportes de mascotas perdidas o encontradas.',
+    translationKey: 'explore',
     element: '[data-tutorial="explore-search"]',
     route: 'explore',
   },
   {
-    title: 'Encuentra coincidencias',
-    description: 'Usa los mismos filtros de especie y tipo de reporte. Elige un radio y mueve el marcador del mapa para buscar cerca de la ubicación que quieras, por ejemplo la tuya.',
+    translationKey: 'matches',
     element: '[data-tutorial="match-filters"]',
     route: 'explore',
   },
   {
-    title: 'Mis reportes',
-    description: 'Accede rápidamente a los reportes que has creado o guardado.',
+    translationKey: 'reports',
     element: '[data-tutorial="reports"]',
     route: 'reports',
   },
   {
-    title: 'Notificaciones',
-    description: 'Revisa alertas, novedades y actualizaciones importantes.',
+    translationKey: 'notifications',
     element: '[data-tutorial="notifications"]',
     route: 'Notifications',
   },
   {
-    title: 'Historial de mascotas',
-    description: 'Consulta la actividad y el historial de las mascotas reclamadas por la comunidad a través de la app.',
+    translationKey: 'petHistory',
     element: '[data-tutorial="pet-history"]',
     route: 'PetHistory',
   },
   {
-    title: 'Información personal',
-    description: 'Administra y actualiza los datos de tu perfil.',
+    translationKey: 'personalInfo',
     element: '[data-tutorial="personal-info"]',
     route: 'ContactInfo',
   },
   {
-    title: '¿Quieres otro paseo?',
-    description: 'Si deseas otro paseo por la app aqui puedes solicitarlo',
+    translationKey: 'repeat',
     element: '[data-tutorial="repeat-tutorial"]',
     route: 'summary',
   },
@@ -66,6 +58,7 @@ const maximumTutorialDuration = 55_000
 export function useTutorial() {
   const route = useRoute()
   const router = useRouter()
+  const { t } = useI18n()
   const isConfirmationVisible = ref(false)
   let tutorialDriver: Driver | null = null
   let originalPath: string | null = null
@@ -110,7 +103,7 @@ export function useTutorial() {
       try {
         await router.push({ name: step.route })
       } catch (error) {
-        console.error(`No se pudo abrir la sección "${step.title}" del tutorial.`, error)
+        console.error(`No se pudo abrir la sección "${t(`tutorial.steps.${step.translationKey}.title`)}" del tutorial.`, error)
         tutorialDriver?.destroy()
         return
       }
@@ -147,10 +140,10 @@ export function useTutorial() {
       stageRadius: 12,
       showProgress: true,
       showButtons: ['previous', 'next', 'close'],
-      nextBtnText: 'Siguiente',
-      prevBtnText: 'Anterior',
-      doneBtnText: 'Finalizar',
-      progressText: 'Paso {{current}} de {{total}}',
+      nextBtnText: t('tutorial.next'),
+      prevBtnText: t('tutorial.previous'),
+      doneBtnText: t('tutorial.finish'),
+      progressText: t('tutorial.progress', { current: '{{current}}', total: '{{total}}' }),
       popoverClass: 'petfinder-tutorial-popover',
       onNextClick: (_element, _step, { state }) => {
         const currentIndex = state.activeIndex ?? -1
@@ -168,9 +161,12 @@ export function useTutorial() {
         if (durationTimer) clearTimeout(durationTimer)
         void restoreOriginalRoute()
       },
-      steps: tutorialSteps.map(({ title, description, element }) => ({
+      steps: tutorialSteps.map(({ translationKey, element }) => ({
         element,
-        popover: { title, description },
+        popover: {
+          title: t(`tutorial.steps.${translationKey}.title`),
+          description: t(`tutorial.steps.${translationKey}.description`),
+        },
       })),
     })
 

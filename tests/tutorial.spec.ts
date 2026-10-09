@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Config, Driver, State } from 'driver.js'
 import TutorialConfirmationModal from '@/components/TutorialConfirmationModal.vue'
+import i18n from '@/plugins/i18n'
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -42,6 +43,7 @@ describe('tutorial guiado', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     sessionStorage.clear()
+    i18n.global.locale.value = 'es'
     mocks.currentPath = '/resumen'
     mocks.push.mockImplementation(async (location: { name: string } | string) => {
       const name = typeof location === 'string' ? location : location.name
@@ -52,6 +54,7 @@ describe('tutorial guiado', () => {
 
   afterEach(() => {
     document.body.innerHTML = ''
+    i18n.global.locale.value = 'es'
     vi.useRealTimers()
     vi.clearAllMocks()
   })
@@ -86,7 +89,7 @@ describe('tutorial guiado', () => {
     expect(options.steps?.[2]?.popover?.title).toBe('Encuentra coincidencias')
     expect(options.steps?.[2]?.element).toBe('[data-tutorial="match-filters"]')
     expect(options.steps?.[7]?.popover?.title).toBe('¿Quieres otro paseo?')
-    expect(options.steps?.[7]?.popover?.description).toBe('Si deseas otro paseo por la app aqui puedes solicitarlo')
+    expect(options.steps?.[7]?.popover?.description).toBe('Si deseas otro paseo por la app aquí puedes solicitarlo.')
     expect(options.steps?.[7]?.element).toBe('[data-tutorial="repeat-tutorial"]')
     expect(mocks.drive).toHaveBeenCalledWith(0)
 
@@ -113,6 +116,28 @@ describe('tutorial guiado', () => {
     await flushPromises()
     expect(mocks.drive).toHaveBeenCalledTimes(3)
     expect(mocks.drive).toHaveBeenLastCalledWith(0)
+    wrapper.unmount()
+  })
+
+  it('muestra los pasos y controles del tutorial en el idioma seleccionado', async () => {
+    i18n.global.locale.value = 'en'
+    const wrapper = mount(TutorialHarness)
+
+    await wrapper.get('#run').trigger('click')
+    await wrapper.get('#accept').trigger('click')
+    await flushPromises()
+
+    const options = mocks.driverOptions as Config
+    expect(options.nextBtnText).toBe('Next')
+    expect(options.prevBtnText).toBe('Previous')
+    expect(options.doneBtnText).toBe('Finish')
+    expect(options.progressText).toBe('Step {{current}} of {{total}}')
+    expect(options.steps?.[0]?.popover?.title).toBe('Overview')
+    expect(options.steps?.[0]?.popover?.description).toBe(
+      'Here you’ll find a summary of the most important information and recent activity.',
+    )
+    expect(options.steps?.[7]?.popover?.title).toBe('Would you like another tour?')
+
     wrapper.unmount()
   })
 })

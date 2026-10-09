@@ -264,7 +264,45 @@
     "welcome": "Bienvenido",
     "question": "¿Quieres un recorrido rápido por la aplicación?",
     "yes": "Sí",
-    "no": "No"
+    "no": "No",
+    "next": "Siguiente",
+    "previous": "Anterior",
+    "finish": "Finalizar",
+    "progress": "Paso {current} de {total}",
+    "steps": {
+      "summary": {
+        "title": "Resumen",
+        "description": "Aquí encontrarás una vista general con la información más importante y la actividad reciente."
+      },
+      "explore": {
+        "title": "Busca reportes",
+        "description": "Escribe en la barra de búsqueda y filtra por especie o por reportes de mascotas perdidas o encontradas."
+      },
+      "matches": {
+        "title": "Encuentra coincidencias",
+        "description": "Usa los mismos filtros de especie y tipo de reporte. Elige un radio y mueve el marcador del mapa para buscar cerca de la ubicación que quieras, por ejemplo la tuya."
+      },
+      "reports": {
+        "title": "Mis reportes",
+        "description": "Accede rápidamente a los reportes que has creado o guardado."
+      },
+      "notifications": {
+        "title": "Notificaciones",
+        "description": "Revisa alertas, novedades y actualizaciones importantes."
+      },
+      "petHistory": {
+        "title": "Historial de mascotas",
+        "description": "Consulta la actividad y el historial de las mascotas reclamadas por la comunidad a través de la app."
+      },
+      "personalInfo": {
+        "title": "Información personal",
+        "description": "Administra y actualiza los datos de tu perfil."
+      },
+      "repeat": {
+        "title": "¿Quieres otro paseo?",
+        "description": "Si deseas otro paseo por la app aquí puedes solicitarlo."
+      }
+    }
   },
   "reportForm": {
     "createTitle": "Reportar una mascota",

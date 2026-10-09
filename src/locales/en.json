@@ -264,7 +264,45 @@
     "welcome": "Welcome",
     "question": "Would you like a quick tour of the app?",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "next": "Next",
+    "previous": "Previous",
+    "finish": "Finish",
+    "progress": "Step {current} of {total}",
+    "steps": {
+      "summary": {
+        "title": "Overview",
+        "description": "Here you’ll find a summary of the most important information and recent activity."
+      },
+      "explore": {
+        "title": "Search reports",
+        "description": "Type in the search bar and filter by species or by lost and found pet reports."
+      },
+      "matches": {
+        "title": "Find matches",
+        "description": "Use the same species and report-type filters. Choose a radius and move the map marker to search near a location of your choice, such as your own."
+      },
+      "reports": {
+        "title": "My reports",
+        "description": "Quickly access reports you’ve created or saved."
+      },
+      "notifications": {
+        "title": "Notifications",
+        "description": "Check alerts, news, and important updates."
+      },
+      "petHistory": {
+        "title": "Pet history",
+        "description": "View activity and history for pets claimed by the community through the app."
+      },
+      "personalInfo": {
+        "title": "Personal information",
+        "description": "Manage and update your profile details."
+      },
+      "repeat": {
+        "title": "Would you like another tour?",
+        "description": "You can request another tour of the app here."
+      }
+    }
   },
   "reportForm": {
     "createTitle": "Report a pet",
