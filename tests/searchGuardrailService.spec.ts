@@ -67,6 +67,23 @@ describe('searchGuardrailService', () => {
     }
   })
 
+  it('permite nombres y palabras cortas con letras repetidas', async () => {
+    const { validateSearchInput } = await import('@/services/searchGuardrailService')
+    for (const term of ['Nala', 'Coco', 'Lulu', 'Kiki', 'Ana', 'perro', 'gato', 'pug', 'Toby', 'chihuahua', 'labrador', 'mississippi']) {
+      const result = validateSearchInput(term)
+      expect(result.valid, `"${term}" debería ser válido`).toBe(true)
+    }
+  })
+
+  it('rechaza bloques cortos repetidos y textos largos de baja entropía', async () => {
+    const { validateSearchInput } = await import('@/services/searchGuardrailService')
+    for (const term of ['zz', 'asdasdasd', 'ababab', 'abababababab', 'aaaa bbbb aaaa']) {
+      const result = validateSearchInput(term)
+      expect(result.valid, `"${term}" debería ser inválido`).toBe(false)
+      expect(result.error).toContain('repetitiv')
+    }
+  })
+
   it('limpia caracteres especiales antes de validar', async () => {
     const { validateSearchInput } = await import('@/services/searchGuardrailService')
     const result = validateSearchInput('gato!!!   labrador  ###')

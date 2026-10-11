@@ -53,6 +53,7 @@ describe('petSearchService guardrails', () => {
         limit: 50,
         type: 'Perro',
         kind: 'Perdida',
+        language: 'es',
       },
     })
   })
