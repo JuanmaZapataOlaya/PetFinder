@@ -19,9 +19,16 @@ function getInitialLocale(): SupportedLocale {
   }
 }
 
-export default createI18n({
+const i18n = createI18n({
   legacy: false,
   locale: getInitialLocale(),
   fallbackLocale: 'es',
   messages: { es, en },
 })
+
+export function getCurrentLocale(): SupportedLocale {
+  const locale = i18n.global.locale.value
+  return supportedLocales.includes(locale as SupportedLocale) ? locale as SupportedLocale : 'es'
+}
+
+export default i18n

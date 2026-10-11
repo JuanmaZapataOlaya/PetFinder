@@ -1,4 +1,5 @@
 import type { AppNotification, NotificationEvidenceImage, PetHistoryRecord, PetTicket } from '@/types'
+import { getCurrentLocale } from '@/plugins/i18n'
 import { supabase } from './supabase'
 
 function mapNotification(row: Record<string, unknown>): AppNotification {
@@ -185,6 +186,7 @@ export async function sendContactRequest(payload: Omit<AppNotification, 'id' | '
     body: {
       notificationId: data.id,
       imageUrls: payload.evidenceImages.map((image) => image.url),
+      language: getCurrentLocale(),
     },
   })
   if (agentError) {
