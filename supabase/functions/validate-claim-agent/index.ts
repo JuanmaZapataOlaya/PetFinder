@@ -4,6 +4,7 @@ import { analyzeImageMetadata } from './tools/analyze-image-metadata.ts'
 import { detectAiGeneratedImage } from './tools/detect-ai-generated-image.ts'
 import { reverseImageSearch } from './tools/reverse-image-search.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { type Language, resolveLanguage } from '../_shared/language.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -34,6 +35,39 @@ type ClaimTicket = {
   breed: string
   color: string
   image: string
+}
+
+const messages = {
+  es: {
+    invalidAnimals: 'Las imagenes no corresponden a animales',
+    irrelevantEvidence: 'Los animales de las fotos no corresponden con el de la publicación',
+    invalidBody: 'notificationId e imageUrls son obligatorios; imageUrls debe tener 2 strings',
+    unauthenticated: 'No autenticado',
+    forbidden: 'La notificación no pertenece al solicitante',
+    ticketUnavailable: 'No se pudo obtener la información del reporte original',
+    animalPrompt: '¿Esta imagen muestra un animal? Responde SOLO con JSON válido: {"animal": true|false}',
+    matchPrompt: (ticket: ClaimTicket) => `¿Esta imagen muestra un animal de la especie "${ticket.type}", con pelaje o color similar a "${ticket.color}" y, cuando sea posible, rasgos compatibles con la raza "${ticket.breed}"? Compárala también con esta foto de referencia del reporte original. Responde SOLO con JSON válido: {"coincide": true|false}`,
+    agentPrompt: (imageList: string) => `Evalúa estas imágenes de soporte para un reclamo de mascota:\n${imageList}`,
+    emailFallbackSender: 'Un usuario',
+    emailFallbackPet: (reportId: number) => `reporte #${reportId}`,
+    emailSubject: (petName: string) => `Nueva solicitud para tu mascota: ${petName}`,
+    emailHtml: (senderName: string, petName: string) => `<p>Hola,</p><p><strong>${senderName}</strong> envió una solicitud relacionada con el reporte de <strong>${petName}</strong>.</p><p>Revisa la solicitud y sus evidencias desde PetFinder. La validación automática de las imágenes se está ejecutando en segundo plano.</p>`,
+  },
+  en: {
+    invalidAnimals: 'The images do not show animals',
+    irrelevantEvidence: 'The animals in the photos do not match the one in the report',
+    invalidBody: 'notificationId and imageUrls are required; imageUrls must contain 2 strings',
+    unauthenticated: 'Not authenticated',
+    forbidden: 'The notification does not belong to the requester',
+    ticketUnavailable: 'The original report information could not be retrieved',
+    animalPrompt: 'Does this image show an animal? Respond ONLY with valid JSON: {"animal": true|false}',
+    matchPrompt: (ticket: ClaimTicket) => `Does this image show an animal of the species "${ticket.type}", with fur or color similar to "${ticket.color}" and, when possible, features compatible with the breed "${ticket.breed}"? The report values may be written in Spanish. Also compare it with this reference photo from the original report. Respond ONLY with valid JSON: {"coincide": true|false}`,
+    agentPrompt: (imageList: string) => `Evaluate these supporting images for a pet claim:\n${imageList}`,
+    emailFallbackSender: 'A user',
+    emailFallbackPet: (reportId: number) => `report #${reportId}`,
+    emailSubject: (petName: string) => `New request for your pet: ${petName}`,
+    emailHtml: (senderName: string, petName: string) => `<p>Hello,</p><p><strong>${senderName}</strong> sent a request related to the report for <strong>${petName}</strong>.</p><p>Review the request and its evidence in PetFinder. The automatic image validation is running in the background.</p>`,
+  },
 }
 
 type RelevanceResult = {
@@ -74,7 +108,7 @@ function calculateCost(usage: TokenUsage, inputRate: number, outputRate: number)
   return usage.inputTokens * inputRate / 1_000_000 + usage.outputTokens * outputRate / 1_000_000
 }
 
-async function validateImagesAreAnimals(imageUrls: string[]): Promise<{ success: boolean; usage: TokenUsage; error?: string }> {
+async function validateImagesAreAnimals(imageUrls: string[], language: Language): Promise<{ success: boolean; usage: TokenUsage; error?: string }> {
   let usage: TokenUsage = { inputTokens: 0, outputTokens: 0 }
 
   for (const imageUrl of imageUrls) {
@@ -85,7 +119,7 @@ async function validateImagesAreAnimals(imageUrls: string[]): Promise<{ success:
         content: [
           {
             type: 'text',
-            text: '¿Esta imagen muestra un animal? Responde SOLO con JSON válido: {"animal": true|false}',
+            text: messages[language].animalPrompt,
           },
           { type: 'image', image: imageUrl },
         ],
@@ -98,7 +132,7 @@ async function validateImagesAreAnimals(imageUrls: string[]): Promise<{ success:
     try {
       parsed = JSON.parse(result.text)
     } catch {
-      return { success: false, usage, error: 'Las imagenes no corresponden a animales' }
+      return { success: false, usage, error: messages[language].invalidAnimals }
     }
 
     if (
@@ -106,18 +140,18 @@ async function validateImagesAreAnimals(imageUrls: string[]): Promise<{ success:
       typeof parsed !== 'object' ||
       typeof (parsed as Record<string, unknown>).animal !== 'boolean'
     ) {
-      return { success: false, usage, error: 'Las imagenes no corresponden a animales' }
+      return { success: false, usage, error: messages[language].invalidAnimals }
     }
 
     if (!(parsed as Record<string, unknown>).animal) {
-      return { success: false, usage, error: 'Las imagenes no corresponden a animales' }
+      return { success: false, usage, error: messages[language].invalidAnimals }
     }
   }
 
   return { success: true, usage }
 }
 
-async function validateAnimalsMatchTicket(imageUrls: string[], ticket: ClaimTicket): Promise<{ success: boolean; usage: TokenUsage; error?: string }> {
+async function validateAnimalsMatchTicket(imageUrls: string[], ticket: ClaimTicket, language: Language): Promise<{ success: boolean; usage: TokenUsage; error?: string }> {
   let usage: TokenUsage = { inputTokens: 0, outputTokens: 0 }
 
   for (const imageUrl of imageUrls) {
@@ -128,7 +162,7 @@ async function validateAnimalsMatchTicket(imageUrls: string[], ticket: ClaimTick
         content: [
           {
             type: 'text',
-            text: `¿Esta imagen muestra un animal de la especie "${ticket.type}", con pelaje o color similar a "${ticket.color}" y, cuando sea posible, rasgos compatibles con la raza "${ticket.breed}"? Compárala también con esta foto de referencia del reporte original. Responde SOLO con JSON válido: {"coincide": true|false}`,
+            text: messages[language].matchPrompt(ticket),
           },
           { type: 'image', image: imageUrl },
           { type: 'image', image: ticket.image },
@@ -142,7 +176,7 @@ async function validateAnimalsMatchTicket(imageUrls: string[], ticket: ClaimTick
     try {
       parsed = JSON.parse(result.text)
     } catch {
-      return { success: false, usage, error: 'Los animales de las fotos no corresponden con el de la publicación' }
+      return { success: false, usage, error: messages[language].irrelevantEvidence }
     }
 
     if (
@@ -150,11 +184,11 @@ async function validateAnimalsMatchTicket(imageUrls: string[], ticket: ClaimTick
       typeof parsed !== 'object' ||
       typeof (parsed as Record<string, unknown>).coincide !== 'boolean'
     ) {
-      return { success: false, usage, error: 'Los animales de las fotos no corresponden con el de la publicación' }
+      return { success: false, usage, error: messages[language].irrelevantEvidence }
     }
 
     if (!(parsed as Record<string, unknown>).coincide) {
-      return { success: false, usage, error: 'Los animales de las fotos no corresponden con el de la publicación' }
+      return { success: false, usage, error: messages[language].irrelevantEvidence }
     }
   }
 
@@ -209,7 +243,7 @@ async function completeCostRecord(costId: string, agentUsage: TokenUsage) {
   if (error) throw error
 }
 
-const SYSTEM_PROMPT = `
+const SYSTEM_PROMPT_ES = `
 Eres un asistente que ayuda al dueño de una mascota a evaluar si las fotos de soporte
 que alguien envió para reclamarla parecen genuinas.
 
@@ -250,21 +284,76 @@ mascota, quien NO tiene conocimientos técnicos. Reglas estrictas para ese repor
 - Si todas las imágenes parecen genuinas, dilo también con esa misma claridad.
 - Cierra siempre recordando que esto es un apoyo para decidir, no una prueba absoluta, y que la
   decisión final de aprobar o rechazar el reclamo es del dueño.
+- Escribe todo el reporte en español.
 `.trim()
 
-const agent = new ToolLoopAgent({
-  model: portkey('gemini-3.5-flash-lite'),
-  system: SYSTEM_PROMPT,
-  tools: { reverseImageSearch, detectAiGeneratedImage, analyzeImageMetadata },
-  stopWhen: stepCountIs(20), // hasta 5 imágenes × hasta 3 tools cada una + margen de razonamiento
-})
+const SYSTEM_PROMPT_EN = `
+You are an assistant that helps a pet owner evaluate whether the supporting photos
+someone sent to claim their pet look genuine.
+
+For EACH image you receive, follow this exact order and stop at the first conclusive finding
+for that image (do not keep spending tools on it once you found something definitive):
+
+1. Call reverseImageSearch with the image.
+   - If "matchType" is "exacta" (exact match): this image was taken from somewhere else on the
+     internet (another site, social network, stock photo bank, or another pet report). This is a
+     serious and conclusive signal. Do NOT call more tools for this image — move to the next one.
+
+2. If there was NO exact match, call detectAiGeneratedImage.
+   - Look in the response for the value related to AI generation (probably under "type", with a
+     key like "ai_generated" or similar) — it is a number between 0 and 1.
+   - If that value is high (above roughly 0.7): conclude that the image was generated by
+     artificial intelligence. This is a serious and conclusive signal. Do NOT call more tools
+     for this image.
+   - If that value is low (below roughly 0.3): the image is probably NOT AI-generated. You can
+     conclude it looks authentic without further steps, or reinforce it with step 3 if you want.
+   - If the value falls in an intermediate range (neither clearly high nor clearly low): it is NOT
+     conclusive on its own, continue to step 3.
+
+3. Only if step 2 was not conclusive, also call analyzeImageMetadata for the same image, and
+   combine that information with the (intermediate) result of detectAiGeneratedImage to form your
+   conclusion about that specific image. Keep in mind that if analyzeImageMetadata returns
+   "aiSignatureDetected: true", that alone is already strong proof of AI generation.
+
+Tool results may contain Spanish values (for example "exacta", "similar", "ninguna", "alta",
+"media", "baja"); interpret them, but never copy them into the report.
+
+When you finish evaluating ALL the images, write ONE final report addressed to the pet owner, who
+has NO technical knowledge. Strict rules for that report:
+
+- Write the entire report in English.
+- Technical words are forbidden: no "EXIF", "score", "API", "vector", "JSON", "raw metadata".
+- Use simple and direct language: "this photo looks like it was taken with a real phone", "this
+  image was found published on another website", "this image was created with artificial
+  intelligence", "this image shows nothing suspicious".
+- If one or more images turned out to be AI-generated or copied from the internet, say so clearly
+  and directly as the FIRST idea of the report — it is the most important conclusion and must not
+  be buried among minor details.
+- If all the images look genuine, say that with the same clarity.
+- Always close by reminding the owner that this is a decision aid, not absolute proof, and that the
+  final decision to approve or reject the claim is theirs.
+`.trim()
+
+function createAgent(system: string) {
+  return new ToolLoopAgent({
+    model: portkey('gemini-3.5-flash-lite'),
+    system,
+    tools: { reverseImageSearch, detectAiGeneratedImage, analyzeImageMetadata },
+    stopWhen: stepCountIs(20), // hasta 5 imágenes × hasta 3 tools cada una + margen de razonamiento
+  })
+}
+
+const agents: Record<Language, ReturnType<typeof createAgent>> = {
+  es: createAgent(SYSTEM_PROMPT_ES),
+  en: createAgent(SYSTEM_PROMPT_EN),
+}
 
 async function sendClaimNotificationEmail(notification: {
   recipient_user_id: string
   report_id: number
   sender_name: string | null
   pet_tickets: { name: string | null } | null
-}) {
+}, language: Language) {
   const resendApiKey = Deno.env.get('RESEND_API_KEY')
   const fromEmail = Deno.env.get('RESEND_FROM_EMAIL')
   if (!resendApiKey || !fromEmail) {
@@ -279,8 +368,8 @@ async function sendClaimNotificationEmail(notification: {
     return
   }
 
-  const senderName = notification.sender_name || 'Un usuario'
-  const petName = notification.pet_tickets?.name || `reporte #${notification.report_id}`
+  const senderName = notification.sender_name || messages[language].emailFallbackSender
+  const petName = notification.pet_tickets?.name || messages[language].emailFallbackPet(notification.report_id)
   const escapeHtml = (value: string) => value.replace(/[&<>'"]/g, (character) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
   })[character] || character)
@@ -293,8 +382,8 @@ async function sendClaimNotificationEmail(notification: {
     body: JSON.stringify({
       from: fromEmail,
       to: [recipientEmail],
-      subject: `Nueva solicitud para tu mascota: ${petName}`,
-      html: `<p>Hola,</p><p><strong>${escapeHtml(senderName)}</strong> envió una solicitud relacionada con el reporte de <strong>${escapeHtml(petName)}</strong>.</p><p>Revisa la solicitud y sus evidencias desde PetFinder. La validación automática de las imágenes se está ejecutando en segundo plano.</p>`,
+      subject: messages[language].emailSubject(petName),
+      html: messages[language].emailHtml(escapeHtml(senderName), escapeHtml(petName)),
     }),
   })
 
@@ -306,19 +395,20 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json()
+    const language = resolveLanguage(body.language, req)
     if (
       typeof body.notificationId !== 'string' ||
       !Array.isArray(body.imageUrls) ||
       body.imageUrls.length !== 2 ||
       body.imageUrls.some((u: unknown) => typeof u !== 'string')
     ) {
-      return jsonResponse({ error: 'notificationId e imageUrls son obligatorios; imageUrls debe tener 2 strings' }, 400)
+      return jsonResponse({ error: messages[language].invalidBody }, 400)
     }
 
     const authorization = req.headers.get('Authorization')
-    if (!authorization?.startsWith('Bearer ')) return jsonResponse({ error: 'No autenticado' }, 401)
+    if (!authorization?.startsWith('Bearer ')) return jsonResponse({ error: messages[language].unauthenticated }, 401)
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(authorization.slice(7))
-    if (userError || !user) return jsonResponse({ error: 'No autenticado' }, 401)
+    if (userError || !user) return jsonResponse({ error: messages[language].unauthenticated }, 401)
 
     const { data: notification, error: notificationError } = await supabaseAdmin
       .from('app_notifications')
@@ -326,36 +416,36 @@ Deno.serve(async (req) => {
       .eq('id', body.notificationId)
       .single()
     if (notificationError || !notification || notification.sender_user_id !== user.id || notification.type !== 'CONTACT_REQUEST') {
-      return jsonResponse({ error: 'La notificación no pertenece al solicitante' }, 403)
+      return jsonResponse({ error: messages[language].forbidden }, 403)
     }
 
     const ticket = notification.pet_tickets
     if (!ticket || !ticket.type || !ticket.breed || !ticket.color || !ticket.image) {
-      return jsonResponse({ error: 'No se pudo obtener la información del reporte original' }, 500)
+      return jsonResponse({ error: messages[language].ticketUnavailable }, 500)
     }
 
     const costId = await createCostRecord(notification.id)
 
-    const guardrail1 = await validateImagesAreAnimals(body.imageUrls)
+    const guardrail1 = await validateImagesAreAnimals(body.imageUrls, language)
     await addGuardrail1Cost(costId, guardrail1.usage)
     if (!guardrail1.success) {
       return jsonResponse({ error: guardrail1.error, code: 'INVALID_ANIMALS' }, 422)
     }
 
-    const guardrail2 = await validateAnimalsMatchTicket(body.imageUrls, ticket)
+    const guardrail2 = await validateAnimalsMatchTicket(body.imageUrls, ticket, language)
     await addGuardrail2Cost(costId, guardrail2.usage)
     if (!guardrail2.success) {
       return jsonResponse({ error: guardrail2.error, code: 'IRRELEVANT_EVIDENCE' }, 422)
     }
 
-    console.log('[validate-claim-agent] Evaluando', body.imageUrls.length, 'imágenes')
+    console.log('[validate-claim-agent] Evaluando', body.imageUrls.length, 'imágenes', { language })
 
     const [_, result] = await Promise.all([
-      sendClaimNotificationEmail(notification),
-      agent.generate({
-        prompt: `Evalúa estas imágenes de soporte para un reclamo de mascota:\n${
-          body.imageUrls.map((u: string, i: number) => `${i + 1}. ${u}`).join('\n')
-        }`,
+      sendClaimNotificationEmail(notification, language),
+      agents[language].generate({
+        prompt: messages[language].agentPrompt(
+          body.imageUrls.map((u: string, i: number) => `${i + 1}. ${u}`).join('\n'),
+        ),
       }),
     ])
     await completeCostRecord(costId, getTokenUsage(result))

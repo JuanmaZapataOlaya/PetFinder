@@ -1,9 +1,61 @@
+import { type Language, resolveLanguage } from '../_shared/language.ts'
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' }
+
+const messages = {
+  es: {
+    methodNotAllowed: 'Método no permitido.',
+    notConfigured: 'La función no está configurada.',
+    invalidBody: 'El cuerpo de la solicitud no es válido.',
+    invalidImage: 'Se requiere una imagen válida.',
+    providerError: 'El proveedor de IA no pudo generar la descripción.',
+    emptyDescription: 'La IA no devolvió una descripción.',
+    timeout: 'La generación tardó demasiado. Intenta de nuevo.',
+    unexpected: 'No se pudo generar la descripción.',
+  },
+  en: {
+    methodNotAllowed: 'Method not allowed.',
+    notConfigured: 'The function is not configured.',
+    invalidBody: 'The request body is not valid.',
+    invalidImage: 'A valid image is required.',
+    providerError: 'The AI provider could not generate the description.',
+    emptyDescription: 'The AI did not return a description.',
+    timeout: 'The generation took too long. Please try again.',
+    unexpected: 'The description could not be generated.',
+  },
+} satisfies Record<Language, Record<string, string>>
+
+function buildContext(language: Language, body: Record<string, unknown>) {
+  const value = (field: unknown, fallback: string) => typeof field === 'string' ? field : fallback
+  if (language === 'en') {
+    return [
+      `Species: ${value(body.type, 'not specified')}`,
+      `Name: ${value(body.name, 'not specified')}`,
+      `Breed: ${value(body.breed, 'not specified')}`,
+      `Color: ${value(body.color, 'not specified')}`,
+      `Report type: ${value(body.kind, 'not specified')}`,
+    ].join('\n')
+  }
+  return [
+    `Especie: ${value(body.type, 'no especificada')}`,
+    `Nombre: ${value(body.name, 'no especificado')}`,
+    `Raza: ${value(body.breed, 'no especificada')}`,
+    `Color: ${value(body.color, 'no especificado')}`,
+    `Tipo de reporte: ${value(body.kind, 'no especificado')}`,
+  ].join('\n')
+}
+
+function buildPrompt(language: Language, context: string) {
+  if (language === 'en') {
+    return `Describe the pet in the image in English for a search report. Be objective and brief (maximum 3 sentences) and mention only visible traits: species, approximate size, coat, colors, patterns, collar and distinctive features. Do not invent data. Field values may be in Spanish (e.g. "Perro" = dog, "Gato" = cat, "Ave" = bird, "Perdida" = lost, "Encontrada" = found); write the description entirely in English. Use this provided data only as context:\n${context}`
+  }
+  return `Describe la mascota de la imagen en español para un reporte de búsqueda. Sé objetivo, breve (máximo 3 frases) y menciona solo rasgos visibles: especie, tamaño aproximado, pelaje, colores, patrones, collar y características distintivas. No inventes datos. Usa estos datos proporcionados solo como contexto:\n${context}`
+}
 
 function jsonResponse(body: Record<string, string>, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: jsonHeaders })
@@ -12,6 +64,7 @@ function jsonResponse(body: Record<string, string>, status = 200) {
 Deno.serve(async (request) => {
   const timeoutMs = 25_000
   let requestTimedOut = false
+  let language = resolveLanguage(undefined, request)
 
   try {
     console.log('[generate-pet-description] Paso 1: solicitud recibida', { method: request.method })
@@ -22,38 +75,33 @@ Deno.serve(async (request) => {
     }
     if (request.method !== 'POST') {
       console.log('[generate-pet-description] Paso 2: método rechazado')
-      return jsonResponse({ error: 'Método no permitido.' }, 405)
+      return jsonResponse({ error: messages[language].methodNotAllowed }, 405)
     }
 
     console.log('[generate-pet-description] Paso 2: leyendo configuración')
     const portkeyApiKey = Deno.env.get('PORTKEY_API_KEY_M')
     if (!portkeyApiKey) {
       console.error('[generate-pet-description] Configuración incompleta: falta PORTKEY_API_KEY')
-      return jsonResponse({ error: 'La función no está configurada.' }, 500)
+      return jsonResponse({ error: messages[language].notConfigured }, 500)
     }
 
     console.log('[generate-pet-description] Paso 3: parseando solicitud')
-    let body: { image?: unknown; type?: unknown; name?: unknown; breed?: unknown; color?: unknown; kind?: unknown }
+    let body: { image?: unknown; type?: unknown; name?: unknown; breed?: unknown; color?: unknown; kind?: unknown; language?: unknown }
     try {
       body = await request.json()
     } catch (error) {
       console.error('[generate-pet-description] JSON inválido:', error instanceof Error ? error.message : 'Error desconocido')
-      return jsonResponse({ error: 'El cuerpo de la solicitud no es válido.' }, 400)
+      return jsonResponse({ error: messages[language].invalidBody }, 400)
     }
+    language = resolveLanguage(body.language, request)
     const isImageReference = typeof body.image === 'string' && (body.image.startsWith('data:image/') || body.image.startsWith('https://'))
     if (!isImageReference) {
       console.log('[generate-pet-description] Paso 4: imagen rechazada')
-      return jsonResponse({ error: 'Se requiere una imagen válida.' }, 400)
+      return jsonResponse({ error: messages[language].invalidImage }, 400)
     }
 
-    console.log('[generate-pet-description] Paso 4: validación completada')
-    const context = [
-      `Especie: ${typeof body.type === 'string' ? body.type : 'no especificada'}`,
-      `Nombre: ${typeof body.name === 'string' ? body.name : 'no especificado'}`,
-      `Raza: ${typeof body.breed === 'string' ? body.breed : 'no especificada'}`,
-      `Color: ${typeof body.color === 'string' ? body.color : 'no especificado'}`,
-      `Tipo de reporte: ${typeof body.kind === 'string' ? body.kind : 'no especificado'}`,
-    ].join('\n')
+    console.log('[generate-pet-description] Paso 4: validación completada', { language })
+    const context = buildContext(language, body)
 
     const controller = new AbortController()
     const timeoutId = setTimeout(() => {
@@ -78,7 +126,7 @@ Deno.serve(async (request) => {
           messages: [{
             role: 'user',
             content: [
-              { type: 'text', text: `Describe la mascota de la imagen en español para un reporte de búsqueda. Sé objetivo, breve (máximo 3 frases) y menciona solo rasgos visibles: especie, tamaño aproximado, pelaje, colores, patrones, collar y características distintivas. No inventes datos. Usa estos datos proporcionados solo como contexto:\n${context}` },
+              { type: 'text', text: buildPrompt(language, context) },
               { type: 'image_url', image_url: { url: body.image } },
             ],
           }],
@@ -90,7 +138,7 @@ Deno.serve(async (request) => {
       if (!upstream.ok) {
         const errorText = await upstream.text()
         console.error('[generate-pet-description] Portkey respondió con error', { status: upstream.status, body: errorText })
-        return jsonResponse({ error: 'El proveedor de IA no pudo generar la descripción.' }, 502)
+        return jsonResponse({ error: messages[language].providerError }, 502)
       }
 
       console.log('[generate-pet-description] Paso 7: parseando respuesta del proveedor')
@@ -102,7 +150,7 @@ Deno.serve(async (request) => {
 
       if (!description.trim()) {
         console.error('[generate-pet-description] La respuesta no contiene una descripción')
-        return jsonResponse({ error: 'La IA no devolvió una descripción.' }, 502)
+        return jsonResponse({ error: messages[language].emptyDescription }, 502)
       }
 
       console.log('[generate-pet-description] Paso 8: descripción generada correctamente')
@@ -114,11 +162,11 @@ Deno.serve(async (request) => {
   } catch (error) {
     if (requestTimedOut || (error instanceof DOMException && error.name === 'AbortError')) {
       console.error('[generate-pet-description] Error controlado: timeout de Portkey/Google')
-      return jsonResponse({ error: 'La generación tardó demasiado. Intenta de nuevo.' }, 504)
+      return jsonResponse({ error: messages[language].timeout }, 504)
     }
 
     const message = error instanceof Error ? error.message : 'Error desconocido'
     console.error('[generate-pet-description] Error no controlado:', message)
-    return jsonResponse({ error: 'No se pudo generar la descripción.' }, 500)
+    return jsonResponse({ error: messages[language].unexpected }, 500)
   }
 })

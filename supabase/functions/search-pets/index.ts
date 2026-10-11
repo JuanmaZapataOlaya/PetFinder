@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { type Language, resolveLanguage } from '../_shared/language.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -7,13 +8,39 @@ const corsHeaders = {
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
+const messages = {
+  es: {
+    methodNotAllowed: 'Método no permitido.',
+    notConfigured: 'El servidor no está configurado correctamente.',
+    invalidBody: 'El cuerpo de la solicitud no es válido.',
+    loadFailed: 'No fue posible cargar los reportes.',
+    embeddingFailed: 'Fallo al generar el embedding de búsqueda.',
+    invalidEmbedding: 'Portkey no devolvió un embedding válido.',
+    searchFailed: 'No fue posible buscar los reportes.',
+    timeout: 'La búsqueda tardó demasiado. Intenta de nuevo.',
+    unexpected: 'Error interno procesando la búsqueda.',
+  },
+  en: {
+    methodNotAllowed: 'Method not allowed.',
+    notConfigured: 'The server is not configured correctly.',
+    invalidBody: 'The request body is not valid.',
+    loadFailed: 'The reports could not be loaded.',
+    embeddingFailed: 'Failed to generate the search embedding.',
+    invalidEmbedding: 'Portkey did not return a valid embedding.',
+    searchFailed: 'The reports could not be searched.',
+    timeout: 'The search took too long. Please try again.',
+    unexpected: 'Internal error while processing the search.',
+  },
+} satisfies Record<Language, Record<string, string>>;
+
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: jsonHeaders });
 }
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
-  if (request.method !== 'POST') return jsonResponse({ error: 'Método no permitido.' }, 405);
+  let language = resolveLanguage(undefined, request);
+  if (request.method !== 'POST') return jsonResponse({ error: messages[language].methodNotAllowed }, 405);
 
   const portkeyApiKey = Deno.env.get('PORTKEY_API_KEY');
   const portkeyBaseUrl = Deno.env.get('PORTKEY_BASE_URL');
@@ -21,15 +48,16 @@ Deno.serve(async (request) => {
   const supabaseSecretKey = Deno.env.get('SECRET_KEY');
 
   if (!portkeyApiKey || !portkeyBaseUrl || !supabaseUrl || !supabaseSecretKey) {
-    return jsonResponse({ error: 'El servidor no está configurado correctamente.' }, 500);
+    return jsonResponse({ error: messages[language].notConfigured }, 500);
   }
 
-  let payload: { query?: unknown; limit?: unknown; type?: unknown; kind?: unknown };
+  let payload: { query?: unknown; limit?: unknown; type?: unknown; kind?: unknown; language?: unknown };
   try {
     payload = await request.json();
   } catch {
-    return jsonResponse({ error: 'El cuerpo de la solicitud no es válido.' }, 400);
+    return jsonResponse({ error: messages[language].invalidBody }, 400);
   }
+  language = resolveLanguage(payload.language, request);
 
   const query = typeof payload.query === 'string' ? payload.query.trim() : '';
   const limit = typeof payload.limit === 'number' && Number.isInteger(payload.limit)
@@ -55,7 +83,7 @@ Deno.serve(async (request) => {
     });
     if (error) {
       console.error('[search-pets] Error en RPC sin búsqueda:', error);
-      return jsonResponse({ error: 'No fue posible cargar los reportes.' }, 500);
+      return jsonResponse({ error: messages[language].loadFailed }, 500);
     }
     return jsonResponse({ results: data || [] });
   }
@@ -81,12 +109,12 @@ Deno.serve(async (request) => {
     const embeddingBody = await embeddingResponse.json();
     if (!embeddingResponse.ok) {
       console.error('[search-pets] Portkey respondió con error', embeddingBody);
-      return jsonResponse({ error: 'Fallo al generar el embedding de búsqueda.' }, 502);
+      return jsonResponse({ error: messages[language].embeddingFailed }, 502);
     }
 
     const embedding = embeddingBody.data?.[0]?.embedding;
     if (!Array.isArray(embedding)) {
-      return jsonResponse({ error: 'Portkey no devolvió un embedding válido.' }, 502);
+      return jsonResponse({ error: messages[language].invalidEmbedding }, 502);
     }
 
     const supabase = createClient(supabaseUrl, supabaseSecretKey);
@@ -100,7 +128,7 @@ Deno.serve(async (request) => {
 
     if (error) {
       console.error('[search-pets] Error en RPC híbrido:', error);
-      return jsonResponse({ error: 'No fue posible buscar los reportes.' }, 500);
+      return jsonResponse({ error: messages[language].searchFailed }, 500);
     }
 
     const results = data || [];
@@ -125,10 +153,10 @@ Deno.serve(async (request) => {
     return jsonResponse({ results });
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      return jsonResponse({ error: 'La búsqueda tardó demasiado. Intenta de nuevo.' }, 504);
+      return jsonResponse({ error: messages[language].timeout }, 504);
     }
     console.error('[search-pets] Error no controlado:', error);
-    return jsonResponse({ error: 'Error interno procesando la búsqueda.' }, 500);
+    return jsonResponse({ error: messages[language].unexpected }, 500);
   } finally {
     clearTimeout(timeoutId);
   }
