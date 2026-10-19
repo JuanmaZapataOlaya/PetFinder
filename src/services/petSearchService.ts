@@ -2,6 +2,7 @@
 // ABOUTME: Validates input through guardrails before invoking the embedding model
 
 import type { PetTicket, PetType, TicketKind } from '@/types'
+import { getCurrentLocale } from '@/plugins/i18n'
 import { supabase } from '@/services/supabase'
 import { validateSearchInput } from '@/services/searchGuardrailService'
 
@@ -61,6 +62,7 @@ export async function searchPets(query: string, filters: PetSearchFilters = {}):
     limit: 50,
     type: filters.type ?? null,
     kind: filters.kind ?? null,
+    language: getCurrentLocale(),
   }
 
   const { data, error } = await supabase.functions.invoke<{ results: SearchTicketRow[] }>('search-pets', {

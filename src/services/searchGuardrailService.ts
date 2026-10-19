@@ -31,6 +31,21 @@ function calculateShannonEntropy(text: string): number {
   return entropy
 }
 
+const MIN_LENGTH_FOR_ENTROPY_CHECK = 8
+const MIN_ENTROPY = 1.5
+
+function isRepetitive(text: string): boolean {
+  const compact = text.toLowerCase().replace(/\s+/g, '')
+
+  // Un único carácter repetido: "aaa", "zzzz"
+  if (new Set(compact).size === 1) return true
+
+  // Un mismo bloque corto repetido 3+ veces: "asdasdasd", "ababab"
+  if (/^(.{1,3})\1{2,}$/.test(compact)) return true
+
+  return compact.length >= MIN_LENGTH_FOR_ENTROPY_CHECK && calculateShannonEntropy(compact) < MIN_ENTROPY
+}
+
 function removeDiacritics(text: string): string {
   return text.normalize('NFD').replace(/[̀-ͯ]/g, '')
 }
@@ -65,9 +80,8 @@ export function validateSearchInput(input: string): { valid: boolean; error?: st
     return { valid: false, error: 'La búsqueda no puede exceder 100 caracteres.' }
   }
 
-  // Check Shannon entropy (too low = likely gibberish/spam)
-  const entropy = calculateShannonEntropy(cleaned)
-  if (entropy < 2) {
+  // Check repetitive input (single char, repeated short block, or low entropy on long text)
+  if (isRepetitive(cleaned)) {
     return { valid: false, error: 'La búsqueda parece inválida (caracteres repetitivos).' }
   }
 
