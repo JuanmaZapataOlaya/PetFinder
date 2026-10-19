@@ -2,6 +2,7 @@
 // ABOUTME: Implements entropy checks, character cleaning, and profanity filtering
 
 import { Profanity } from '@2toad/profanity';
+import i18n from '@/plugins/i18n';
 
 const profanity = new Profanity({ languages: ['es', 'en'] })
 
@@ -46,6 +47,10 @@ function isRepetitive(text: string): boolean {
   return compact.length >= MIN_LENGTH_FOR_ENTROPY_CHECK && calculateShannonEntropy(compact) < MIN_ENTROPY
 }
 
+function guardrailError(key: 'tooShort' | 'tooLong' | 'repetitive' | 'profanity'): string {
+  return i18n.global.t(`explore.guardrails.${key}`)
+}
+
 function removeDiacritics(text: string): string {
   return text.normalize('NFD').replace(/[̀-ͯ]/g, '')
 }
@@ -73,21 +78,21 @@ export function validateSearchInput(input: string): { valid: boolean; error?: st
 
   // Validate length
   if (cleaned.length < 2) {
-    return { valid: false, error: 'La búsqueda debe tener al menos 2 caracteres.' }
+    return { valid: false, error: guardrailError('tooShort') }
   }
 
   if (cleaned.length > 100) {
-    return { valid: false, error: 'La búsqueda no puede exceder 100 caracteres.' }
+    return { valid: false, error: guardrailError('tooLong') }
   }
 
   // Check repetitive input (single char, repeated short block, or low entropy on long text)
   if (isRepetitive(cleaned)) {
-    return { valid: false, error: 'La búsqueda parece inválida (caracteres repetitivos).' }
+    return { valid: false, error: guardrailError('repetitive') }
   }
 
   // Check for profanity
   if (profanity.exists(cleaned)) {
-    return { valid: false, error: 'La búsqueda contiene palabras no permitidas.' }
+    return { valid: false, error: guardrailError('profanity') }
   }
 
   return { valid: true, cleaned }

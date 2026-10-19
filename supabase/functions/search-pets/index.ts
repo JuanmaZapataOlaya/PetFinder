@@ -33,6 +33,24 @@ const messages = {
   },
 } satisfies Record<Language, Record<string, string>>;
 
+// Stored filter values are Spanish; English (and agent enum) aliases map onto them.
+const typeAliases: Record<string, string> = {
+  perro: 'Perro', dog: 'Perro',
+  gato: 'Gato', cat: 'Gato',
+  ave: 'Ave', bird: 'Ave',
+  otro: 'Otro', other: 'Otro',
+};
+
+const kindAliases: Record<string, string> = {
+  perdida: 'Perdida', lost: 'Perdida',
+  encontrada: 'Encontrada', found: 'Encontrada',
+};
+
+function normalizeFilter(value: unknown, aliases: Record<string, string>): string | null {
+  if (typeof value !== 'string') return null;
+  return aliases[value.trim().toLowerCase()] ?? null;
+}
+
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: jsonHeaders });
 }
@@ -63,14 +81,8 @@ Deno.serve(async (request) => {
   const limit = typeof payload.limit === 'number' && Number.isInteger(payload.limit)
     ? Math.min(Math.max(payload.limit, 1), 100)
     : 50;
-  const validTypes = ['Perro', 'Gato', 'Ave', 'Otro'];
-  const validKinds = ['Perdida', 'Encontrada'];
-  const type = payload.type === undefined || payload.type === null || payload.type === ''
-    ? null
-    : validTypes.includes(String(payload.type)) ? String(payload.type) : null;
-  const kind = payload.kind === undefined || payload.kind === null || payload.kind === ''
-    ? null
-    : validKinds.includes(String(payload.kind)) ? String(payload.kind) : null;
+  const type = normalizeFilter(payload.type, typeAliases);
+  const kind = normalizeFilter(payload.kind, kindAliases);
 
   if (!query) {
     const supabase = createClient(supabaseUrl, supabaseSecretKey);

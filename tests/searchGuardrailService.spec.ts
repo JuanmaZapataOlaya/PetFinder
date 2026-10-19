@@ -84,6 +84,19 @@ describe('searchGuardrailService', () => {
     }
   })
 
+  it('devuelve los errores en el idioma seleccionado', async () => {
+    const { default: i18n } = await import('@/plugins/i18n')
+    const { validateSearchInput } = await import('@/services/searchGuardrailService')
+    i18n.global.locale.value = 'en'
+    try {
+      expect(validateSearchInput('a').error).toBe('The search must be at least 2 characters long.')
+      expect(validateSearchInput('aaaaaaaaaa').error).toBe('The search looks invalid (repetitive characters).')
+      expect(validateSearchInput('shit dog lost').error).toBe('The search contains words that are not allowed.')
+    } finally {
+      i18n.global.locale.value = 'es'
+    }
+  })
+
   it('limpia caracteres especiales antes de validar', async () => {
     const { validateSearchInput } = await import('@/services/searchGuardrailService')
     const result = validateSearchInput('gato!!!   labrador  ###')
