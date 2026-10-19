@@ -158,6 +158,12 @@
     "reportCount": "{count} reportes",
     "searchPlaceholder": "Buscar por nombre, zona o raza",
     "searchFailed": "No fue posible realizar la búsqueda.",
+    "guardrails": {
+      "tooShort": "La búsqueda debe tener al menos 2 caracteres.",
+      "tooLong": "La búsqueda no puede exceder 100 caracteres.",
+      "repetitive": "La búsqueda parece inválida (caracteres repetitivos).",
+      "profanity": "La búsqueda contiene palabras no permitidas."
+    },
     "filterKind": "Filtrar reportes por tipo",
     "filterSpecies": "Filtrar reportes por especie",
     "typeLabel": "Tipo: {value}",

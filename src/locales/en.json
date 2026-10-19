@@ -158,6 +158,12 @@
     "reportCount": "{count} reports",
     "searchPlaceholder": "Search by name, area, or breed",
     "searchFailed": "The search could not be completed.",
+    "guardrails": {
+      "tooShort": "The search must be at least 2 characters long.",
+      "tooLong": "The search cannot exceed 100 characters.",
+      "repetitive": "The search looks invalid (repetitive characters).",
+      "profanity": "The search contains words that are not allowed."
+    },
     "filterKind": "Filter reports by type",
     "filterSpecies": "Filter reports by species",
     "typeLabel": "Type: {value}",
